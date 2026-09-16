@@ -205,7 +205,8 @@ abstract final class SettingBoxKey {
       aiModel = 'aiModel',
       aiModelListCache = 'aiModelListCache',
       aiModelListCacheTime = 'aiModelListCacheTime',
-      aiPromptTemplates = 'aiPromptTemplates';
+      aiPromptTemplates = 'aiPromptTemplates',
+      aiAutoScroll = 'aiAutoScroll';
 
   static const String minimizeOnExit = 'minimizeOnExit',
       windowSize = 'windowSize',

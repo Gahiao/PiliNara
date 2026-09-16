@@ -5,10 +5,12 @@ import 'package:PiliPlus/pages/ai_chat/models.dart';
 import 'package:PiliPlus/pages/common/slide/common_slide_page.dart';
 import 'package:PiliPlus/pages/video/controller.dart';
 import 'package:PiliPlus/services/ai_chat/ai_chat_service.dart';
+import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/controller.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/text_field.dart';
 import 'package:material_ui/material_ui.dart' hide TextField;
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_markdown_plus_latex/flutter_markdown_plus_latex.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -35,6 +37,7 @@ class _AiChatPageState extends State<AiChatPage>
   bool _isAtBottom = true;
   double _lastScrollOffset = 0;
   bool _scrollScheduled = false;
+  bool _controlsCollapsed = false;
 
   /// 小屏设备（手表/小折叠屏）紧凑布局：仅压缩间距与控件密度，不缩放字号。
   bool get _isCompact => MediaQuery.sizeOf(context).height < 600;
@@ -69,12 +72,15 @@ class _AiChatPageState extends State<AiChatPage>
     chatCtl = Get.find<AiChatController>(tag: widget.heroTag);
     _templates = AiChatService.getTemplates();
     _scrollCtl.addListener(_onScroll);
+    _focusNode.addListener(_onFocusChanged);
   }
 
   @override
   void dispose() {
     _inputCtl.dispose();
-    _focusNode.dispose();
+    _focusNode
+      ..removeListener(_onFocusChanged)
+      ..dispose();
     _scrollCtl
       ..removeListener(_onScroll)
       ..dispose();
@@ -95,8 +101,62 @@ class _AiChatPageState extends State<AiChatPage>
     _lastScrollOffset = offset;
   }
 
+  void _onFocusChanged() {
+    if (_focusNode.hasFocus) {
+      _setControlsCollapsed(false);
+    }
+  }
+
+  bool _onUserScroll(UserScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    switch (notification.direction) {
+      case ScrollDirection.reverse:
+        _setControlsCollapsed(true);
+      case ScrollDirection.forward:
+        _setControlsCollapsed(false);
+      case ScrollDirection.idle:
+    }
+    return false;
+  }
+
+  void _setControlsCollapsed(bool value) {
+    if (_controlsCollapsed == value || !mounted) return;
+    setState(() => _controlsCollapsed = value);
+  }
+
+  void _expandControls() => _setControlsCollapsed(false);
+
+  void _jumpToLatest() {
+    if (!_scrollCtl.hasClients) return;
+    if (!_isAtBottom) {
+      setState(() => _isAtBottom = true);
+    }
+    _scrollCtl.animateTo(
+      _scrollCtl.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
+  }
+
   void _scrollToBottom() {
-    if (!_isAtBottom || !_scrollCtl.hasClients || _scrollScheduled) return;
+    if (!_scrollCtl.hasClients || !_isAtBottom || _scrollScheduled) {
+      return;
+    }
+    if (!Pref.aiAutoScroll) {
+      _scrollScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollScheduled = false;
+        if (mounted &&
+            _scrollCtl.hasClients &&
+            _isAtBottom &&
+            _scrollCtl.position.maxScrollExtent -
+                    _scrollCtl.position.pixels >
+                100) {
+          setState(() => _isAtBottom = false);
+        }
+      });
+      return;
+    }
     _scrollScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollScheduled = false;
@@ -176,9 +236,15 @@ class _AiChatPageState extends State<AiChatPage>
                   style: (_isCompact ? theme.textTheme.titleSmall : theme.textTheme.titleMedium)?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
-                ),
-                const Spacer(),
-                Obx(() {
+                 ),
+                 const Spacer(),
+                 if (_controlsCollapsed)
+                   IconButton(
+                     onPressed: _expandControls,
+                     icon: const Icon(Icons.unfold_more),
+                     tooltip: '展开控制栏',
+                   ),
+                 Obx(() {
                   if (chatCtl.messages.isNotEmpty) {
                     return TextButton.icon(
                       onPressed: chatCtl.clearMessages,
@@ -196,36 +262,53 @@ class _AiChatPageState extends State<AiChatPage>
           ),
           SizedBox(height: _isCompact ? 4 : 8),
 
-          // Prompt selector + analyze button
-          _buildPromptBar(theme),
-          Divider(height: 1, color: colorScheme.outlineVariant),
-
-          // Warning banner
-          Obx(() {
-            if (!chatCtl.subtitleWarning.value) {
-              return const SizedBox.shrink();
-            }
-            return Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              color: colorScheme.errorContainer,
-              child: Text(
-                '提示：当前视频文本较长，AI 首次阅读需要几秒钟，请耐心等待',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: colorScheme.onErrorContainer,
-                ),
-              ),
-            );
-          }),
+           // Prompt selector + analyze button
+           AnimatedSize(
+             alignment: Alignment.topCenter,
+             duration: const Duration(milliseconds: 220),
+             child: _controlsCollapsed
+                 ? const SizedBox.shrink()
+                 : Column(
+                     children: [
+                       _buildPromptBar(theme),
+                       Divider(height: 1, color: colorScheme.outlineVariant),
+                       Obx(() {
+                         if (!chatCtl.subtitleWarning.value) {
+                           return const SizedBox.shrink();
+                         }
+                         return Container(
+                           width: double.infinity,
+                           padding: const EdgeInsets.symmetric(
+                             horizontal: 16,
+                             vertical: 6,
+                           ),
+                           color: colorScheme.errorContainer,
+                           child: Text(
+                             '提示：当前视频文本较长，AI 首次阅读需要几秒钟，请耐心等待',
+                             style: TextStyle(
+                               fontSize: 12,
+                               color: colorScheme.onErrorContainer,
+                             ),
+                           ),
+                         );
+                       }),
+                     ],
+                   ),
+           ),
 
           // Content area (slideable)
           Expanded(
             child: enableSlide ? slideList(theme) : buildList(theme),
           ),
 
-          // Input bar
-          _buildInputBar(theme),
+           // Input bar
+           AnimatedSize(
+             alignment: Alignment.bottomCenter,
+             duration: const Duration(milliseconds: 220),
+             child: _controlsCollapsed
+                 ? const SizedBox.shrink()
+                 : _buildInputBar(theme),
+           ),
         ],
       ),
       ),
@@ -356,22 +439,40 @@ class _AiChatPageState extends State<AiChatPage>
 
       _scrollToBottom();
 
-      return ListView.builder(
-        controller: _scrollCtl,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        itemCount: msgs.length,
-        itemBuilder: (context, index) {
-          final msg = msgs[index];
-          if (msg.isDivider) return _buildDivider(theme);
-          if (msg.role == 'user') {
-            final displayText = msg.templateName != null
-                ? '/${msg.templateName}'
-                : msg.content;
-            return _buildUserMessage(displayText, theme);
-          }
-          return _buildAssistantMessage(msg, theme);
-        },
-      );
+       return NotificationListener<UserScrollNotification>(
+         onNotification: _onUserScroll,
+         child: Stack(
+           children: [
+             ListView.builder(
+               controller: _scrollCtl,
+               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+               itemCount: msgs.length,
+               itemBuilder: (context, index) {
+                 final msg = msgs[index];
+                 if (msg.isDivider) return _buildDivider(theme);
+                 if (msg.role == 'user') {
+                   final displayText = msg.templateName != null
+                       ? '/${msg.templateName}'
+                       : msg.content;
+                   return _buildUserMessage(displayText, theme);
+                 }
+                 return _buildAssistantMessage(msg, theme);
+               },
+             ),
+             if (!_isAtBottom)
+               Positioned(
+                 right: 16,
+                 bottom: 16,
+                 child: FloatingActionButton.small(
+                   heroTag: null,
+                   tooltip: '回到最新',
+                   onPressed: _jumpToLatest,
+                   child: const Icon(Icons.keyboard_arrow_down_rounded),
+                 ),
+               ),
+           ],
+         ),
+       );
     });
   }
 

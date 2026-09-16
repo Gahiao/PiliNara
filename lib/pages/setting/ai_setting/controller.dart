@@ -9,6 +9,7 @@ class AiSettingController extends GetxController {
   final apiUrl = ''.obs;
   final apiKey = ''.obs;
   final model = ''.obs;
+  final aiAutoScroll = true.obs;
   final modelList = <String>[].obs;
   final isLoadingModels = false.obs;
   final templates = <AiPromptTemplate>[].obs;
@@ -24,6 +25,7 @@ class AiSettingController extends GetxController {
     apiUrl.value = Pref.aiApiUrl;
     apiKey.value = Pref.aiApiKey;
     model.value = Pref.aiModel;
+    aiAutoScroll.value = Pref.aiAutoScroll;
     apiUrlCtl = TextEditingController(text: apiUrl.value);
     apiKeyCtl = TextEditingController(text: apiKey.value);
     modelCtl = TextEditingController(text: model.value);
@@ -78,6 +80,11 @@ class AiSettingController extends GetxController {
   void saveModel(String value) {
     model.value = value;
     Pref.aiModel = value;
+  }
+
+  void saveAiAutoScroll(bool value) {
+    aiAutoScroll.value = value;
+    Pref.aiAutoScroll = value;
   }
 
   void addTemplate(String name, String prompt) {

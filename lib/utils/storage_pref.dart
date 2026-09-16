@@ -1634,6 +1634,12 @@ abstract final class Pref {
   static set aiPromptTemplates(String value) =>
       _setting.put(SettingBoxKey.aiPromptTemplates, value);
 
+  static bool get aiAutoScroll =>
+      _setting.get(SettingBoxKey.aiAutoScroll, defaultValue: true);
+
+  static set aiAutoScroll(bool value) =>
+      _setting.put(SettingBoxKey.aiAutoScroll, value);
+
   static int get angleDegrees =>
       _setting.get(SettingBoxKey.angleDegrees, defaultValue: 30);
 
