@@ -1374,6 +1374,9 @@ abstract final class Pref {
   static bool get enableOnlineTotal =>
       _setting.get(SettingBoxKey.enableOnlineTotal, defaultValue: false);
 
+  static bool get enableDmCount =>
+      _setting.get(SettingBoxKey.enableDmCount, defaultValue: false);
+
   static bool get autoEnterFullScreen =>
       _setting.get(SettingBoxKey.enableAutoEnter, defaultValue: false);
 
@@ -1641,7 +1644,6 @@ abstract final class Pref {
       _setting.put(SettingBoxKey.aiAutoScroll, value);
 
   /// 思考强度（reasoning_effort）：未干预服务商默认行为时为 'default'。
-  /// 旧值 'auto' 按 'default' 处理，见 docs/AI对话P1详细规格.md
   static String get aiReasoningEffort {
     final value =
         _setting.get(SettingBoxKey.aiReasoningEffort, defaultValue: 'default');

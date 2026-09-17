@@ -24,6 +24,7 @@ abstract final class SettingBoxKey {
       enableAutoEnter = 'enableAutoEnter',
       enableAutoExit = 'enableAutoExit',
       enableOnlineTotal = 'enableOnlineTotal',
+      enableDmCount = 'enableDmCount',
       superChatType = 'superChatType',
       superChatTimeType = 'superChatTimeType',
       fullScreenSCWidth = 'fullScreenSCWidth',

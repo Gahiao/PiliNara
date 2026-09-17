@@ -1862,21 +1862,28 @@ class HeaderControlState extends State<HeaderControl>
                 },
               ),
             ),
-            if (introController.isShowOnlineTotal)
+            if (introController.isShowOnlineTotal || introController.isShowDmCount)
               Positioned(
                 left: 0,
                 bottom: 0,
                 child: FractionalTranslation(
                   translation: const Offset(0, 1),
-                  child: Obx(
-                    () => Text(
-                      '${introController.total.value}人正在看',
+                  child: Obx(() {
+                    final parts = <String>[
+                      if (introController.isShowOnlineTotal)
+                        '${introController.total.value}人正在看',
+                      if (introController.isShowDmCount &&
+                          videoDetailCtr.dmCount.value != null)
+                        '${videoDetailCtr.dmCount.value}条弹幕',
+                    ];
+                    return Text(
+                      parts.join('  '),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                 ),
               ),
           ],
@@ -2235,14 +2242,14 @@ class HeaderControlState extends State<HeaderControl>
               ],
             ),
           // 计入人数行的高度，收起顶部控制栏时避免溢出内容残留。
-          if (introController.isShowOnlineTotal)
+          if (introController.isShowOnlineTotal || introController.isShowDmCount)
             const Visibility(
               visible: false,
               maintainAnimation: true,
               maintainState: true,
               maintainSize: true,
               child: Text(
-                '0人正在看',
+                '0人正在看  0条弹幕',
                 maxLines: 1,
                 style: TextStyle(
                   color: Colors.white,
