@@ -27,13 +27,6 @@ class AiSettingPage extends StatelessWidget {
                   Pref.enableAiChat = value;
                 },
               )),
-          Obx(() => SwitchListTile(
-                title: const Text('禁用 AI 回复自动滚动'),
-                subtitle: const Text('AI 回复时不主动滚动到最新内容'),
-                value: !controller.aiAutoScroll.value,
-                onChanged: (value) =>
-                    controller.saveAiAutoScroll(!value),
-              )),
           const SizedBox(height: 8),
 
           // API 配置
@@ -261,6 +254,30 @@ class AiSettingPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
+
+          // 交互与显示
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('交互与显示', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Obx(() => SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('禁用 AI 回复自动滚动'),
+                        subtitle: const Text('AI 回复时不主动滚动到最新内容'),
+                        value: !controller.aiAutoScroll.value,
+                        onChanged: (value) =>
+                            controller.saveAiAutoScroll(!value),
+                      )),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
           // Info card
           Card(
             color: colorScheme.surfaceContainerHighest,

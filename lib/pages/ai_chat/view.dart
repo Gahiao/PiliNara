@@ -10,7 +10,9 @@ import 'package:PiliPlus/common/widgets/flutter/text_field/controller.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/text_field.dart';
 import 'package:material_ui/material_ui.dart' hide TextField;
 import 'package:flutter/services.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection;
+import 'package:flutter/foundation.dart' show clampDouble;
+import 'package:flutter/gestures.dart'
+    show PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_markdown_plus_latex/flutter_markdown_plus_latex.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -37,7 +39,20 @@ class _AiChatPageState extends State<AiChatPage>
   bool _isAtBottom = true;
   double _lastScrollOffset = 0;
   bool _scrollScheduled = false;
-  bool _controlsCollapsed = false;
+
+  /// 控制栏收起进度：0 完全展开，1 完全收起，由用户滚动位移驱动。
+  final _barCollapse = ValueNotifier<double>(0);
+
+  /// 顶部提示词栏的布局 key：取它布局后的自然高度，用于把滚动量换算成
+  /// 收起进度，并保证滚动补偿与实际布局位移一致。
+  final _promptBarKey = GlobalKey();
+
+  /// 布局完成前的兜底高度，数值与提示词栏的默认高度接近。
+  static const double _defaultPromptBarHeight = 64.0;
+
+  /// 顶部提示词/分析栏的自然高度（含提示条、分割线）。
+  double get _promptBarHeight =>
+      _promptBarKey.currentContext?.size?.height ?? _defaultPromptBarHeight;
 
   /// 小屏设备（手表/小折叠屏）紧凑布局：仅压缩间距与控件密度，不缩放字号。
   bool get _isCompact => MediaQuery.sizeOf(context).height < 600;
@@ -84,6 +99,7 @@ class _AiChatPageState extends State<AiChatPage>
     _scrollCtl
       ..removeListener(_onScroll)
       ..dispose();
+    _barCollapse.dispose();
     super.dispose();
   }
 
@@ -102,29 +118,80 @@ class _AiChatPageState extends State<AiChatPage>
   }
 
   void _onFocusChanged() {
-    if (_focusNode.hasFocus) {
-      _setControlsCollapsed(false);
+    if (!_focusNode.hasFocus) return;
+    final value = _barCollapse.value;
+    if (value == 0) return;
+    final height = _promptBarHeight;
+    _barCollapse.value = 0;
+    // 控制栏弹回会把列表上边缘压下同样高度，补偿滚动位置避免消息跳动
+    if (_scrollCtl.hasClients) {
+      _scrollCtl.position.correctBy(value * height);
     }
   }
 
-  bool _onUserScroll(UserScrollNotification notification) {
+  /// 只有用户手势滚动才收放控制栏。
+  ///
+  /// [ScrollUpdateNotification.dragDetails]、[OverscrollNotification.dragDetails]
+  /// 为空时说明是惯性滑动或程序自动滚动（AI 流式回复时的自动滚到底部），
+  /// 此时控制栏保持不动；鼠标滚轮、触控板没有 dragDetails，
+  /// 由 [_onPointerSignal] 单独处理。
+  bool _onScrollNotification(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.vertical) return false;
-    switch (notification.direction) {
-      case ScrollDirection.reverse:
-        _setControlsCollapsed(true);
-      case ScrollDirection.forward:
-        _setControlsCollapsed(false);
-      case ScrollDirection.idle:
+    if (notification is ScrollUpdateNotification) {
+      if (notification.dragDetails == null) return false;
+      _handleUserScroll(notification.scrollDelta ?? 0);
+    } else if (notification is OverscrollNotification &&
+        notification.dragDetails != null) {
+      // 列表到顶/到底后继续拖拽也能把控制栏平移回来
+      _updateBarCollapse(notification.overscroll, _promptBarHeight);
     }
     return false;
   }
 
-  void _setControlsCollapsed(bool value) {
-    if (_controlsCollapsed == value || !mounted) return;
-    setState(() => _controlsCollapsed = value);
+  /// 鼠标滚轮、触控板滚动只发指针信号，不产生带 dragDetails 的滚动通知。
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final scrollDelta = event.scrollDelta.dy;
+    if (scrollDelta == 0) return;
+    if (_scrollCtl.hasClients) {
+      final position = _scrollCtl.position;
+      // 已在边界时滚轮不会真的滚动，只收放控制栏，不补偿滚动位置
+      final canScroll = scrollDelta > 0
+          ? position.pixels < position.maxScrollExtent
+          : position.pixels > position.minScrollExtent;
+      if (!canScroll) {
+        _updateBarCollapse(scrollDelta, _promptBarHeight);
+        return;
+      }
+    }
+    _handleUserScroll(scrollDelta);
   }
 
-  void _expandControls() => _setControlsCollapsed(false);
+  /// 按用户滚动的位移量收放控制栏，并补偿列表滚动位置。
+  void _handleUserScroll(double scrollDelta) {
+    final height = _promptBarHeight;
+    final value = _barCollapse.value;
+    if (!_updateBarCollapse(scrollDelta, height)) return;
+    // 顶栏收起会让列表上边缘上移同样高度，补偿滚动位置以保证内容跟手 1:1
+    if (_scrollCtl.hasClients) {
+      _scrollCtl.position.correctBy((value - _barCollapse.value) * height);
+    }
+  }
+
+  /// 按滚动量更新控制栏进度，返回进度是否发生变化。
+  ///
+  /// [height] 为顶栏的实际高度：累计滚动量与它相等时正好完全收起。
+  bool _updateBarCollapse(double scrollDelta, double height) {
+    if (scrollDelta == 0 || height <= 0) return false;
+    final next = clampDouble(
+      _barCollapse.value + scrollDelta / height,
+      0.0,
+      1.0,
+    );
+    if (next == _barCollapse.value) return false;
+    _barCollapse.value = next;
+    return true;
+  }
 
   void _jumpToLatest() {
     if (!_scrollCtl.hasClients) return;
@@ -238,12 +305,6 @@ class _AiChatPageState extends State<AiChatPage>
                   ),
                  ),
                  const Spacer(),
-                 if (_controlsCollapsed)
-                   IconButton(
-                     onPressed: _expandControls,
-                     icon: const Icon(Icons.unfold_more),
-                     tooltip: '展开控制栏',
-                   ),
                  Obx(() {
                   if (chatCtl.messages.isNotEmpty) {
                     return TextButton.icon(
@@ -262,62 +323,83 @@ class _AiChatPageState extends State<AiChatPage>
           ),
           SizedBox(height: _isCompact ? 4 : 8),
 
-           // Prompt selector + analyze button
-           AnimatedSize(
-             alignment: Alignment.topCenter,
-             duration: const Duration(milliseconds: 220),
-             child: _controlsCollapsed
-                 ? const SizedBox.shrink()
-                 : Column(
-                     children: [
-                       _buildPromptBar(theme),
-                       Divider(height: 1, color: colorScheme.outlineVariant),
-                       Obx(() {
-                         if (!chatCtl.subtitleWarning.value) {
-                           return const SizedBox.shrink();
-                         }
-                         return Container(
-                           width: double.infinity,
-                           padding: const EdgeInsets.symmetric(
-                             horizontal: 16,
-                             vertical: 6,
-                           ),
-                           color: colorScheme.errorContainer,
-                           child: Text(
-                             '提示：当前视频文本较长，AI 首次阅读需要几秒钟，请耐心等待',
-                             style: TextStyle(
-                               fontSize: 12,
-                               color: colorScheme.onErrorContainer,
-                             ),
-                           ),
-                         );
-                       }),
-                     ],
-                   ),
-           ),
+          // Prompt selector + analyze button
+          _collapsibleBar(
+            slideUp: true,
+            child: Column(
+              key: _promptBarKey,
+              children: [
+                _buildPromptBar(theme),
+                Divider(height: 1, color: colorScheme.outlineVariant),
+                Obx(() {
+                  if (!chatCtl.subtitleWarning.value) {
+                    return const SizedBox.shrink();
+                  }
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    color: colorScheme.errorContainer,
+                    child: Text(
+                      '提示：当前视频文本较长，AI 首次阅读需要几秒钟，请耐心等待',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.onErrorContainer,
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
 
           // Content area (slideable)
           Expanded(
             child: enableSlide ? slideList(theme) : buildList(theme),
           ),
 
-           // Input bar
-           AnimatedSize(
-             alignment: Alignment.bottomCenter,
-             duration: const Duration(milliseconds: 220),
-             child: _controlsCollapsed
-                 ? const SizedBox.shrink()
-                 : _buildInputBar(theme),
-           ),
+          // Input bar
+          _collapsibleBar(
+            slideUp: false,
+            child: _buildInputBar(theme),
+          ),
         ],
       ),
       ),
     );
   }
 
+  /// 让控制栏随 [_barCollapse] 连续平移收起与展开。
+  ///
+  /// [slideUp] 为 true（顶部提示词栏）时内容贴住容器下边缘向上平移滑出，
+  /// 与首页顶栏的 CustomHeightWidget（高度减少 + 向上平移）等价；
+  /// 为 false（底部输入栏）时内容贴住容器上边缘向下平移滑出，
+  /// 被裁掉的是输入栏底部的留白。两者都是平移加高度减少，
+  /// 高度减少腾出的空间由消息列表接管。
+  ///
+  /// 用 [SizeTransition] 而非 CustomHeightWidget：这里需要裁剪溢出内容，
+  /// 提示词栏上方还有标题栏，不裁剪会画到标题栏上。
+  Widget _collapsibleBar({required bool slideUp, required Widget child}) {
+    return ValueListenableBuilder<double>(
+      valueListenable: _barCollapse,
+      child: child,
+      builder: (context, progress, child) => SizeTransition(
+        sizeFactor: AlwaysStoppedAnimation(1 - progress),
+        alignment: slideUp ? Alignment.bottomLeft : Alignment.topLeft,
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget buildList(ThemeData theme) {
-    return _buildContent(theme);
+    return Listener(
+      // 鼠标滚轮/触控板滚动没有 dragDetails，由指针信号单独跟随
+      onPointerSignal: _onPointerSignal,
+      child: _buildContent(theme),
+    );
   }
 
   Widget _buildPromptBar(ThemeData theme) {
@@ -439,8 +521,8 @@ class _AiChatPageState extends State<AiChatPage>
 
       _scrollToBottom();
 
-       return NotificationListener<UserScrollNotification>(
-         onNotification: _onUserScroll,
+       return NotificationListener<ScrollNotification>(
+         onNotification: _onScrollNotification,
          child: Stack(
            children: [
              ListView.builder(
