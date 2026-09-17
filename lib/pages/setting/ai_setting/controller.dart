@@ -5,11 +5,25 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 
 class AiSettingController extends GetxController {
+  /// reasoning_effort 可选值，界面直接显示英文协议名，
+  /// 'default' 显示为「默认」且不下发该字段
+  static const reasoningEffortOptions = <String>[
+    'default',
+    'none',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+  ];
+
   final enableAiChat = true.obs;
   final apiUrl = ''.obs;
   final apiKey = ''.obs;
   final model = ''.obs;
   final aiAutoScroll = true.obs;
+  final reasoningEffort = 'default'.obs;
   final modelList = <String>[].obs;
   final isLoadingModels = false.obs;
   final templates = <AiPromptTemplate>[].obs;
@@ -26,6 +40,7 @@ class AiSettingController extends GetxController {
     apiKey.value = Pref.aiApiKey;
     model.value = Pref.aiModel;
     aiAutoScroll.value = Pref.aiAutoScroll;
+    reasoningEffort.value = Pref.aiReasoningEffort;
     apiUrlCtl = TextEditingController(text: apiUrl.value);
     apiKeyCtl = TextEditingController(text: apiKey.value);
     modelCtl = TextEditingController(text: model.value);
@@ -85,6 +100,11 @@ class AiSettingController extends GetxController {
   void saveAiAutoScroll(bool value) {
     aiAutoScroll.value = value;
     Pref.aiAutoScroll = value;
+  }
+
+  void saveReasoningEffort(String value) {
+    reasoningEffort.value = value;
+    Pref.aiReasoningEffort = value;
   }
 
   void addTemplate(String name, String prompt) {

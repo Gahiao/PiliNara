@@ -130,6 +130,54 @@ class AiSettingPage extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+
+          // 模型参数
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('模型参数', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  Obx(() => DropdownButtonFormField<String>(
+                        // ignore: deprecated_member_use
+                        value: AiSettingController.reasoningEffortOptions
+                                .contains(controller.reasoningEffort.value)
+                            ? controller.reasoningEffort.value
+                            : 'default',
+                        decoration: const InputDecoration(
+                          labelText: '思考强度',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                          prefixIcon: Icon(Icons.psychology_outlined),
+                        ),
+                        items: AiSettingController.reasoningEffortOptions
+                            .map(
+                              (e) => DropdownMenuItem(
+                                value: e,
+                                child: Text(e == 'default' ? '默认' : e),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            controller.saveReasoningEffort(value);
+                          }
+                        },
+                      )),
+                  const SizedBox(height: 6),
+                  Text(
+                    '通过 reasoning_effort 控制模型的推理投入',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
 
           // 模板管理

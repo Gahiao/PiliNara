@@ -1640,6 +1640,17 @@ abstract final class Pref {
   static set aiAutoScroll(bool value) =>
       _setting.put(SettingBoxKey.aiAutoScroll, value);
 
+  /// 思考强度（reasoning_effort）：未干预服务商默认行为时为 'default'。
+  /// 旧值 'auto' 按 'default' 处理，见 docs/AI对话P1详细规格.md
+  static String get aiReasoningEffort {
+    final value =
+        _setting.get(SettingBoxKey.aiReasoningEffort, defaultValue: 'default');
+    return value == 'auto' ? 'default' : value;
+  }
+
+  static set aiReasoningEffort(String value) =>
+      _setting.put(SettingBoxKey.aiReasoningEffort, value);
+
   static int get angleDegrees =>
       _setting.get(SettingBoxKey.angleDegrees, defaultValue: 30);
 

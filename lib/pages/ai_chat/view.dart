@@ -40,6 +40,9 @@ class _AiChatPageState extends State<AiChatPage>
   double _lastScrollOffset = 0;
   bool _scrollScheduled = false;
 
+  /// 思考框限高档是否已消费本次滚轮事件（内层还能滚时不再让外层跟着滚）
+  bool _reasoningWheelConsumed = false;
+
   /// 控制栏收起进度：0 完全展开，1 完全收起，由用户滚动位移驱动。
   final _barCollapse = ValueNotifier<double>(0);
 
@@ -137,6 +140,8 @@ class _AiChatPageState extends State<AiChatPage>
   /// 由 [_onPointerSignal] 单独处理。
   bool _onScrollNotification(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.vertical) return false;
+    // 思考框限高档的内层滚动不参与顶栏收放与列表贴底判定
+    if (notification.depth != 0) return false;
     if (notification is ScrollUpdateNotification) {
       if (notification.dragDetails == null) return false;
       _handleUserScroll(notification.scrollDelta ?? 0);
@@ -151,6 +156,11 @@ class _AiChatPageState extends State<AiChatPage>
   /// 鼠标滚轮、触控板滚动只发指针信号，不产生带 dragDetails 的滚动通知。
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
+    // 思考框限高档的内层可以滚时由内层消费本次滚轮
+    if (_reasoningWheelConsumed) {
+      _reasoningWheelConsumed = false;
+      return;
+    }
     final scrollDelta = event.scrollDelta.dy;
     if (scrollDelta == 0) return;
     if (_scrollCtl.hasClients) {
@@ -203,6 +213,19 @@ class _AiChatPageState extends State<AiChatPage>
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
     );
+  }
+
+  /// 思考框限高档内层滚到顶/底后，把剩余位移交给外层对话列表
+  void _scrollOuterBy(double delta) {
+    if (!_scrollCtl.hasClients || delta == 0) return;
+    final position = _scrollCtl.position;
+    final target = clampDouble(
+      position.pixels + delta,
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if (target == position.pixels) return;
+    position.jumpTo(target);
   }
 
   void _scrollToBottom() {
@@ -612,6 +635,10 @@ class _AiChatPageState extends State<AiChatPage>
 
   Widget _buildAssistantMessage(ChatMessage msg, ThemeData theme) {
     final colorScheme = theme.colorScheme;
+    // 既无思考（含只收到空白/标签）也无正文且已停流时不渲染空气泡
+    if (!msg.hasReasoning && msg.content.isEmpty && !msg.isStreaming) {
+      return const SizedBox.shrink();
+    }
     return Align(
       alignment: Alignment.centerLeft,
       child: Column(
@@ -632,29 +659,23 @@ class _AiChatPageState extends State<AiChatPage>
                 bottomRight: Radius.circular(16),
               ),
             ),
-            child: msg.content.isEmpty && msg.isStreaming
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'AI 正在思考...',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colorScheme.outline,
-                        ),
-                      ),
-                    ],
-                  )
-                : SelectionArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 思考块是整条助手消息内部第一个子 Widget，不是独立消息
+                if (msg.hasReasoning) ...[
+                  _ReasoningBlock(
+                    msg: msg,
+                    onChanged: chatCtl.messages.refresh,
+                    onOuterScrollBy: _scrollOuterBy,
+                    isOuterAtBottom: () => _isAtBottom,
+                    onInnerWheelConsumed: () => _reasoningWheelConsumed = true,
+                  ),
+                  if (msg.content.isNotEmpty) const SizedBox(height: 8),
+                ],
+                if (msg.content.isNotEmpty)
+                  SelectionArea(
                     child: MarkdownBody(
                       data: msg.content,
                       blockSyntaxes: [LatexBlockSyntax()],
@@ -795,7 +816,32 @@ class _AiChatPageState extends State<AiChatPage>
                         ),
                       ),
                     ),
+                  )
+                // 流已开始但尚无思考、也无正文时保留原有等待占位
+                else if (msg.isStreaming && !msg.hasReasoning)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'AI 正在思考...',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colorScheme.outline,
+                        ),
+                      ),
+                    ],
                   ),
+              ],
+            ),
           ),
           // Copy button at bottom-right of bubble, after streaming ends
           if (!msg.isStreaming && msg.content.isNotEmpty)
@@ -944,6 +990,360 @@ class TimestampBuilder extends MarkdownElementBuilder {
     return GestureDetector(
       onTap: () => onTap(seconds),
       child: Text(text, style: style),
+    );
+  }
+}
+
+/// 助手消息内的思考块（不拆成独立消息）。
+///
+/// 两套独立状态：
+/// - 形态 [ChatMessage.isReasoningExpanded]：true=卡片，false=胶囊
+/// - 高度档 [ChatMessage.isReasoningFullHeight]：false=限高 120（内容框内局部
+///   滚动），true=放开（无内层滚动，整段跟着对话列表走）
+class _ReasoningBlock extends StatefulWidget {
+  const _ReasoningBlock({
+    required this.msg,
+    required this.onChanged,
+    required this.onOuterScrollBy,
+    required this.isOuterAtBottom,
+    required this.onInnerWheelConsumed,
+  });
+
+  final ChatMessage msg;
+  final VoidCallback onChanged;
+
+  /// 内层滚到顶/底后，把剩余位移交给外层对话列表
+  final void Function(double delta) onOuterScrollBy;
+
+  /// 外层对话列表是否贴着底部
+  final bool Function() isOuterAtBottom;
+
+  /// 限高档滚轮由内层消费时通知页面，避免外层同时滚动
+  final VoidCallback onInnerWheelConsumed;
+
+  @override
+  State<_ReasoningBlock> createState() => _ReasoningBlockState();
+}
+
+class _ReasoningBlockState extends State<_ReasoningBlock> {
+  /// 限高档高度（逻辑像素），紧凑布局同样使用 120
+  static const double _limitedHeight = 120;
+
+  /// 贴底判定，复用 P0 的 100 像素阈值
+  static const double _bottomThreshold = 100;
+
+  final _innerCtl = ScrollController();
+
+  /// 内层是否贴着底部：贴着时新字到达后内层自动滚到最新
+  bool _innerFollowing = true;
+
+  /// 待执行的内层定位：落到最新 / 回到顶部
+  bool _jumpInnerToLatest = false;
+  bool _resetInnerToTop = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _innerCtl.addListener(_onInnerScroll);
+  }
+
+  @override
+  void dispose() {
+    _innerCtl
+      ..removeListener(_onInnerScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onInnerScroll() {
+    if (!_innerCtl.hasClients) return;
+    final position = _innerCtl.position;
+    _innerFollowing =
+        position.maxScrollExtent - position.pixels <= _bottomThreshold;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ReasoningBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.msg.isReasoningExpanded) {
+      _jumpInnerToLatest = false;
+      _resetInnerToTop = false;
+      return;
+    }
+    if (widget.msg.isReasoningFullHeight &&
+        !_jumpInnerToLatest &&
+        !_resetInnerToTop) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncInnerScroll());
+  }
+
+  /// 限高档流式跟随与点击切换后的内层定位，只在限高档生效
+  void _syncInnerScroll() {
+    if (!mounted || !_innerCtl.hasClients) return;
+    if (!widget.msg.isReasoningExpanded || widget.msg.isReasoningFullHeight) {
+      return;
+    }
+    if (_jumpInnerToLatest || _resetInnerToTop) {
+      final toLatest = _jumpInnerToLatest;
+      _jumpInnerToLatest = false;
+      _resetInnerToTop = false;
+      final position = _innerCtl.position;
+      final target = toLatest
+          ? position.maxScrollExtent
+          : position.minScrollExtent;
+      if (target != position.pixels) _innerCtl.jumpTo(target);
+      return;
+    }
+    // 贴着内层底部才跟随新字，用户上滑后暂停，回到底部附近后恢复
+    if (!_innerFollowing) return;
+    final position = _innerCtl.position;
+    if (position.pixels < position.maxScrollExtent) {
+      _innerCtl.jumpTo(position.maxScrollExtent);
+    }
+  }
+
+  /// Header 点击：
+  /// - 思考中且正文仍空：只切换高度档，不收成胶囊
+  /// - 正文已出现：收成胶囊，回看结束后再点即收起
+  /// - 流已结束且始终没有正文：放开高度档时收成胶囊，限高时先放开
+  void _onHeaderTap() {
+    final msg = widget.msg;
+    if (msg.content.isNotEmpty) {
+      _collapseToCapsule();
+    } else if (msg.isStreaming) {
+      _toggleHeight();
+    } else if (msg.isReasoningFullHeight) {
+      _collapseToCapsule();
+    } else {
+      _toggleHeight();
+    }
+  }
+
+  /// 限高 ↔ 放开，形态保持卡片
+  void _toggleHeight() {
+    final msg = widget.msg;
+    if (msg.isReasoningFullHeight) {
+      // 放开 → 限高：外层贴底时内层落到最新，外层已上滑则保持当前位置
+      msg.isReasoningFullHeight = false;
+      if (widget.isOuterAtBottom()) {
+        _jumpInnerToLatest = true;
+      } else {
+        _jumpInnerToLatest = false;
+        _resetInnerToTop = false;
+      }
+    } else {
+      // 限高 → 放开：只补偿滚动一次，切换前内层贴着底部才把最新思考
+      // 滚进可见区；外层禁用自动滚动设置不管这次点击
+      final wasAtBottom = _innerCtl.hasClients && _innerFollowing;
+      final growth =
+          _innerCtl.hasClients ? _innerCtl.position.maxScrollExtent : 0.0;
+      msg.isReasoningFullHeight = true;
+      if (wasAtBottom && growth > 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.onOuterScrollBy(growth);
+        });
+      }
+    }
+    widget.onChanged();
+  }
+
+  /// 收成胶囊：只改形态，不改高度档
+  void _collapseToCapsule() {
+    widget.msg.isReasoningExpanded = false;
+    _jumpInnerToLatest = false;
+    _resetInnerToTop = false;
+    widget.onChanged();
+  }
+
+  /// 整条胶囊点击：形态改回卡片、高度档放开，从思考内容顶部开始回看
+  void _onCapsuleTap() {
+    widget.msg
+      ..isReasoningExpanded = true
+      ..isReasoningFullHeight = true;
+    _resetInnerToTop = true;
+    _jumpInnerToLatest = false;
+    widget.onChanged();
+  }
+
+  /// 限高档滚轮先滚内层，只有内层还能滚时才消费本次事件
+  void _onInnerPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    if (!_innerCtl.hasClients) return;
+    final delta = event.scrollDelta.dy;
+    if (delta == 0) return;
+    final position = _innerCtl.position;
+    final canScroll = delta > 0
+        ? position.pixels < position.maxScrollExtent
+        : position.pixels > position.minScrollExtent;
+    if (canScroll) widget.onInnerWheelConsumed();
+  }
+
+  /// 限高档内层滚到顶/底后继续同方向滚动，把剩余位移交给外层对话列表
+  bool _onInnerScrollNotification(ScrollNotification notification) {
+    if (notification is OverscrollNotification &&
+        notification.dragDetails != null) {
+      widget.onOuterScrollBy(notification.overscroll);
+    }
+    return false;
+  }
+
+  String get _title =>
+      '思考了 ${widget.msg.reasoningSeconds.toStringAsFixed(1)} 秒';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      alignment: Alignment.topLeft,
+      child: widget.msg.isReasoningExpanded
+          ? _buildCard(theme, colorScheme)
+          : _buildCapsule(colorScheme),
+    );
+  }
+
+  /// 胶囊形态：正文开始生成或思考结束后的收起态
+  Widget _buildCapsule(ColorScheme colorScheme) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: _onCapsuleTap,
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            height: 30,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline_rounded,
+                    size: 18,
+                    color: colorScheme.outline,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: colorScheme.outline,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: colorScheme.outline,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 卡片形态：Header 只切换高度档，内容区只负责滚动和划词
+  Widget _buildCard(ThemeData theme, ColorScheme colorScheme) {
+    final fullHeight = widget.msg.isReasoningFullHeight;
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: _onHeaderTap,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline_rounded,
+                    size: 18,
+                    color: colorScheme.outline,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colorScheme.outline,
+                      ),
+                    ),
+                  ),
+                  // 限高档/胶囊用向下箭头（还有更多），放开高度档用向上箭头
+                  Icon(
+                    fullHeight
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 20,
+                    color: colorScheme.outline,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: colorScheme.outline.withValues(alpha: 0.1),
+          ),
+          const SizedBox(height: 6),
+          _buildContent(theme, colorScheme),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent(ThemeData theme, ColorScheme colorScheme) {
+    final text = Container(
+      padding: const EdgeInsets.only(left: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(color: colorScheme.primary, width: 2),
+        ),
+      ),
+      child: SelectionArea(
+        child: Text(
+          widget.msg.reasoningContent,
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.5,
+            color: theme.hintColor,
+          ),
+        ),
+      ),
+    );
+    // 放开高度档没有内层滚动，整段跟着对话列表走
+    if (widget.msg.isReasoningFullHeight) return text;
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onInnerScrollNotification,
+      child: Listener(
+        onPointerSignal: _onInnerPointerSignal,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: _limitedHeight),
+          child: SingleChildScrollView(
+            controller: _innerCtl,
+            physics: const ClampingScrollPhysics(),
+            child: text,
+          ),
+        ),
+      ),
     );
   }
 }
