@@ -60,7 +60,7 @@ class AiSettingPage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // 模型选择
+          // 模型配置
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -69,7 +69,7 @@ class AiSettingPage extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text('模型选择', style: theme.textTheme.titleMedium),
+                      Text('模型配置', style: theme.textTheme.titleMedium),
                       const Spacer(),
                       Obx(
                         () => controller.isLoadingModels.value
@@ -126,52 +126,12 @@ class AiSettingPage extends StatelessWidget {
                       onChanged: controller.saveModel,
                     );
                   }),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // 模型参数
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('模型参数', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 12),
-                  Obx(() => DropdownButtonFormField<String>(
-                        // ignore: deprecated_member_use
-                        value: AiSettingController.reasoningEffortOptions
-                                .contains(controller.reasoningEffort.value)
-                            ? controller.reasoningEffort.value
-                            : 'default',
-                        decoration: const InputDecoration(
-                          labelText: '思考强度',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          prefixIcon: Icon(Icons.psychology_outlined),
-                        ),
-                        items: AiSettingController.reasoningEffortOptions
-                            .map(
-                              (e) => DropdownMenuItem(
-                                value: e,
-                                child: Text(e == 'default' ? '默认' : e),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            controller.saveReasoningEffort(value);
-                          }
-                        },
-                      )),
-                  const SizedBox(height: 6),
-                  Text(
-                    '通过 reasoning_effort 控制模型的推理投入',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.outline,
+                  Obx(
+                    () => _buildReasoningEffortItem(
+                      context,
+                      controller,
+                      colorScheme,
                     ),
                   ),
                 ],
@@ -369,6 +329,66 @@ class AiSettingPage extends StatelessWidget {
     );
   }
 
+  // 思考强度
+  Widget _buildReasoningEffortItem(
+    BuildContext context,
+    AiSettingController controller,
+    ColorScheme colorScheme,
+  ) {
+    return Material(
+      color: colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () => _showReasoningEffortSheet(context, controller),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.lightbulb_outline_rounded,
+                size: 18,
+                color: colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              const Text('思考强度', style: TextStyle(fontSize: 14)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: colorScheme.outline.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  AiSettingController.reasoningEffortLabel(
+                    controller.reasoningEffort.value,
+                  ),
+                  style: TextStyle(fontSize: 12, color: colorScheme.outline),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(Icons.chevron_right, size: 18, color: colorScheme.outline),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showReasoningEffortSheet(
+    BuildContext context,
+    AiSettingController controller,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      clipBehavior: Clip.hardEdge,
+      constraints: const BoxConstraints(maxWidth: 640),
+      builder: (context) => _ReasoningEffortSheet(controller: controller),
+    );
+  }
+
   void _confirmRestoreDefaults(
     BuildContext context,
     AiSettingController controller,
@@ -491,6 +511,92 @@ class _ApiKeyFieldState extends State<_ApiKeyField> {
       autocorrect: false,
       enableSuggestions: false,
       onChanged: widget.controller.saveApiKey,
+    );
+  }
+}
+
+/// 思考强度滑块
+class _ReasoningEffortSheet extends StatefulWidget {
+  const _ReasoningEffortSheet({required this.controller});
+
+  final AiSettingController controller;
+
+  @override
+  State<_ReasoningEffortSheet> createState() => _ReasoningEffortSheetState();
+}
+
+class _ReasoningEffortSheetState extends State<_ReasoningEffortSheet> {
+  static const _options = AiSettingController.reasoningEffortOptions;
+
+  late double _value = AiSettingController.reasoningEffortIndexOf(
+    widget.controller.reasoningEffort.value,
+  ).toDouble();
+
+  int get _index => _value.round();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        24,
+        0,
+        24,
+        24 + MediaQuery.viewPaddingOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('调整模型思考深度', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(
+            '并非所有模型都支持深度调整，请参考模型和提供商文档',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.outline,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Icon(
+            Icons.lightbulb_outline_rounded,
+            size: 32,
+            color: colorScheme.primary,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            AiSettingController.reasoningEffortLabel(_options[_index]),
+            style: theme.textTheme.titleMedium,
+          ),
+          Slider(
+            value: _value,
+            max: (_options.length - 1).toDouble(),
+            divisions: _options.length - 1,
+            label: AiSettingController.reasoningEffortLabel(_options[_index]),
+            onChanged: (value) => setState(() => _value = value),
+            onChangeEnd: (value) => widget.controller.saveReasoningEffort(
+              _options[value.round()],
+            ),
+          ),
+          Row(
+            children: [
+              for (final option in _options)
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      AiSettingController.reasoningEffortLabel(option),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colorScheme.outline,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,8 +1,8 @@
 import 'package:PiliPlus/services/ai_chat/ai_chat_service.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
+import 'package:material_ui/material_ui.dart';
 
 class AiSettingController extends GetxController {
   /// reasoning_effort 可选值，界面直接显示英文协议名，
@@ -17,6 +17,17 @@ class AiSettingController extends GetxController {
     'xhigh',
     'max',
   ];
+
+  static const defaultReasoningEffortLabel = '默认';
+
+  static String reasoningEffortLabel(String value) =>
+      value == 'default' ? defaultReasoningEffortLabel : value;
+
+  /// 当前值在选项表中的下标，未知值回退到默认档
+  static int reasoningEffortIndexOf(String value) {
+    final index = reasoningEffortOptions.indexOf(value);
+    return index < 0 ? 0 : index;
+  }
 
   final enableAiChat = true.obs;
   final apiUrl = ''.obs;
@@ -59,8 +70,8 @@ class AiSettingController extends GetxController {
   void _loadCachedModels() {
     final cacheTime = Pref.aiModelListCacheTime;
     final now = DateTime.now().millisecondsSinceEpoch;
-    // Cache valid for 1 hour
-    if (now - cacheTime < 3600000) {
+    // Cache valid for 1 day
+    if (now - cacheTime < 86400000) {
       modelList.value = Pref.aiModelListCache;
     }
   }
