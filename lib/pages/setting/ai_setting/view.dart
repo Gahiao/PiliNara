@@ -121,7 +121,6 @@ class AiSettingPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Obx(() {
-                    // 列表为空时退回手填模型名
                     if (controller.modelList.isEmpty) {
                       return TextField(
                         controller: controller.modelCtl,
@@ -370,7 +369,6 @@ class AiSettingPage extends StatelessWidget {
   ) {
     final colorScheme = theme.colorScheme;
     final model = controller.model.value;
-    // M3 filled 容器只有上方 4dp 圆角
     const radius = BorderRadius.vertical(top: Radius.circular(4));
     return StaticPopupMenuButton<String>(
       initialValue: model.isEmpty ? null : model,

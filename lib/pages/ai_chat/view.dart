@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show clampDouble;
 import 'package:flutter/gestures.dart'
     show PointerScrollEvent, PointerSignalEvent;
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_markdown_plus_latex/flutter_markdown_plus_latex.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -37,10 +38,12 @@ class _AiChatPageState extends State<AiChatPage>
   late List<AiPromptTemplate> _templates;
   int _selectedPromptIndex = 0;
   bool _isAtBottom = true;
-  double _lastScrollOffset = 0;
   bool _scrollScheduled = false;
 
-  /// 思考框限高档是否已消费本次滚轮事件（内层还能滚时不再让外层跟着滚）
+  /// 手指拖拽中，此时不自动滚动，避免和手指抢滚动位置
+  bool _userDragging = false;
+
+  /// 思考框限高档是否已消费本次滚轮事件
   bool _reasoningWheelConsumed = false;
 
   /// 控制栏收起进度：0 完全展开，1 完全收起，由用户滚动位移驱动。
@@ -108,16 +111,22 @@ class _AiChatPageState extends State<AiChatPage>
 
   void _onScroll() {
     if (!_scrollCtl.hasClients) return;
-    final pos = _scrollCtl.position;
-    final offset = pos.pixels;
-    if (offset < _lastScrollOffset) {
+    _syncFollowState(_scrollCtl.position.userScrollDirection);
+  }
+
+  /// 跟随开关：回看历史停跟随，滚向最新且贴底 100px 内恢复。
+  ///
+  /// 用 userScrollDirection 而非比较位移：程序滚动只会产生 idle，
+  /// 不会把自动跟随或控制栏补偿误判成「用户回到最新」
+  void _syncFollowState(ScrollDirection direction) {
+    if (direction == ScrollDirection.forward) {
       if (_isAtBottom) setState(() => _isAtBottom = false);
-    } else if (offset > _lastScrollOffset) {
-      if (!_isAtBottom && pos.maxScrollExtent - offset <= 100) {
+    } else if (direction == ScrollDirection.reverse && !_isAtBottom) {
+      final position = _scrollCtl.position;
+      if (position.maxScrollExtent - position.pixels <= 100) {
         setState(() => _isAtBottom = true);
       }
     }
-    _lastScrollOffset = offset;
   }
 
   void _onFocusChanged() {
@@ -142,7 +151,17 @@ class _AiChatPageState extends State<AiChatPage>
     if (notification.metrics.axis != Axis.vertical) return false;
     // 思考框限高档的内层滚动不参与顶栏收放与列表贴底判定
     if (notification.depth != 0) return false;
-    if (notification is ScrollUpdateNotification) {
+    if (notification is ScrollStartNotification) {
+      if (notification.dragDetails != null) _userDragging = true;
+    } else if (notification is ScrollEndNotification) {
+      // 程序滚动（correctBy 等）也会发 ScrollEnd，只有拖拽结束才复位
+      if (notification.dragDetails != null) _userDragging = false;
+    } else if (notification is UserScrollNotification) {
+      // 拖拽接惯性时上面那次来自 ballistic，用 idle 兜底复位
+      if (notification.direction == ScrollDirection.idle) {
+        _userDragging = false;
+      }
+    } else if (notification is ScrollUpdateNotification) {
       if (notification.dragDetails == null) return false;
       _handleUserScroll(notification.scrollDelta ?? 0);
     } else if (notification is OverscrollNotification &&
@@ -156,7 +175,6 @@ class _AiChatPageState extends State<AiChatPage>
   /// 鼠标滚轮、触控板滚动只发指针信号，不产生带 dragDetails 的滚动通知。
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
-    // 思考框限高档的内层可以滚时由内层消费本次滚轮
     if (_reasoningWheelConsumed) {
       _reasoningWheelConsumed = false;
       return;
@@ -226,9 +244,15 @@ class _AiChatPageState extends State<AiChatPage>
     );
     if (target == position.pixels) return;
     position.jumpTo(target);
+    // jumpTo 不产生 forward/reverse，按交接方向补一次跟随判定
+    _syncFollowState(
+      delta > 0 ? ScrollDirection.reverse : ScrollDirection.forward,
+    );
   }
 
   void _scrollToBottom() {
+    // 手指还按在屏幕上时不抢滚动位置，松手后由下一次刷新接着跟随
+    if (_userDragging) return;
     if (!_scrollCtl.hasClients || !_isAtBottom || _scrollScheduled) {
       return;
     }
@@ -1124,7 +1148,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
   void _toggleHeight() {
     final msg = widget.msg;
     if (msg.isReasoningFullHeight) {
-      // 放开 → 限高：外层贴底时内层落到最新，外层已上滑则保持当前位置
+      // 外层贴底才让内层落到最新
       msg.isReasoningFullHeight = false;
       if (widget.isOuterAtBottom()) {
         _jumpInnerToLatest = true;
@@ -1133,8 +1157,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
         _resetInnerToTop = false;
       }
     } else {
-      // 限高 → 放开：只补偿滚动一次，切换前内层贴着底部才把最新思考
-      // 滚进可见区；外层禁用自动滚动设置不管这次点击
+      // 切换前内层贴底才补偿一次滚动，把最新思考滚进可见区
       final wasAtBottom = _innerCtl.hasClients && _innerFollowing;
       final growth =
           _innerCtl.hasClients ? _innerCtl.position.maxScrollExtent : 0.0;
@@ -1205,7 +1228,6 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
     );
   }
 
-  /// 胶囊形态：正文开始生成或思考结束后的收起态
   Widget _buildCapsule(ColorScheme colorScheme) {
     return Align(
       alignment: Alignment.centerLeft,
@@ -1285,7 +1307,6 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
                       ),
                     ),
                   ),
-                  // 限高档/胶囊用向下箭头（还有更多），放开高度档用向上箭头
                   Icon(
                     fullHeight
                         ? Icons.keyboard_arrow_up_rounded
