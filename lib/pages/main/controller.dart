@@ -27,7 +27,7 @@ import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
 class MainController extends GetxController
-    with GetSingleTickerProviderStateMixin, AccountMixin {
+    with GetSingleTickerProviderStateMixin, AccountMixin, WidgetsBindingObserver {
   @override
   final AccountService accountService = Get.find<AccountService>();
 
@@ -75,6 +75,8 @@ class MainController extends GetxController
   @override
   void onInit() {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
+    ClipboardBv.check();
     if (Pref.autoUpdate) {
       Update.checkUpdate();
     }
