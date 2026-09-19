@@ -79,7 +79,7 @@ class MainController extends GetxController
     WidgetsBinding.instance.addObserver(this);
     ClipboardBv.check();
 
-    @override
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ClipboardBv.check(); 
