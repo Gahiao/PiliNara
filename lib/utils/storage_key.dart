@@ -343,7 +343,8 @@ abstract final class LocalCacheKey {
       remarkMids = 'remarkMids',
       cdnNodeList = 'cdnNodeList',
       cdnNodeListTime = 'cdnNodeListTime',
-      cdnNodeRegion = 'cdnNodeRegion';
+      cdnNodeRegion = 'cdnNodeRegion',
+      lastBvClipboard = "lastBvClipboard";
 }
 
 abstract final class VideoBoxKey {
