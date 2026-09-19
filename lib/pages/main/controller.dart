@@ -77,6 +77,20 @@ class MainController extends GetxController
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
     ClipboardBv.check();
+
+    @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ClipboardBv.check(); 
+    }
+  }
+
+  @override
+  void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.onClose();
+  }
+      
     if (Pref.autoUpdate) {
       Update.checkUpdate();
     }
