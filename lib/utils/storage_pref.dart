@@ -1696,4 +1696,15 @@ abstract final class Pref {
   static set BV_jump(bool value) =>
       _setting.put(SettingBoxKey.BV_jump,
       value);
+
+    static String? get lastBvClipboard =>
+    _localCache.get(LocalCacheKey.lastBvClipboard);
+
+static set lastBvClipboard(String? value) {
+  if (value == null) {
+    _localCache.delete(LocalCacheKey.lastBvClipboard);
+  } else {
+    _localCache.put(LocalCacheKey.lastBvClipboard, value);
+  }
+}
 }
