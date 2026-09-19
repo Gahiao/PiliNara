@@ -9,7 +9,7 @@ abstract final class ClipboardBv {
   static String? _lastHandled;
 
   static Future<void> check() async {
-    if (!Pref.bvJump) return;
+    if (!Pref.BV_jump) return;
 
     final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
     if (text == null || text.isEmpty) return;
