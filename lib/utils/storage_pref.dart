@@ -54,6 +54,8 @@ import 'package:get/get.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'storage_key.dart';
+
 abstract final class Pref {
   static final Box _setting = GStorage.setting;
   static final Box _video = GStorage.video;
@@ -1687,4 +1689,11 @@ abstract final class Pref {
           defaultValue: const <String, String>{},
         ),
       );
+  static bool get BV_jump =>
+      _setting.get(SettingBoxKey.BV_jump,
+      defaultValue: false);
+
+  static set BV_jump(bool value) =>
+      _setting.put(SettingBoxKey.BV_jump,
+      value);
 }
