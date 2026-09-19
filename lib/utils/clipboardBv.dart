@@ -6,7 +6,7 @@ final _urlPattern = RegExp(r'https?://\S*(?:bilibili\.com|b23\.tv)/\S*');
 final _bvPattern = RegExp(r'[Bb][Vv]1[0-9A-Za-z]{9}');
 
 abstract final class ClipboardBv {
-  static String? _lastHandled;
+  
 
   static Future<void> check() async {
     if (!Pref.BV_jump) return;
@@ -14,13 +14,16 @@ abstract final class ClipboardBv {
     final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
     if (text == null || text.isEmpty) return;
 
+    if (text == Pref.lastBvClipboard) return;
+
     final url = _urlPattern.firstMatch(text)?.group(0);
     final bvid = _bvPattern.firstMatch(text)?.group(0);
     final target = url ??
         (bvid == null ? null : 'https://www.bilibili.com/video/$bvid');
 
-    if (target == null || target == _lastHandled) return;
-    _lastHandled = target;
+    if (target == null) return;
+
+    Pref.lastBvClipboard = text;
 
     await _openUrl(target);
   }
