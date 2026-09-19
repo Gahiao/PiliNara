@@ -59,24 +59,20 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     onSkipToPrevious = null;
   }
 
-  void _emitIdleState() {
-    if (playbackState.value.processingState == AudioProcessingState.idle) {
+  void _emitIdleState({bool forceCompleted = false}) {
+    if (forceCompleted ||
+        playbackState.value.processingState == AudioProcessingState.idle) {
       playbackState.add(
-        PlaybackState(
-          processingState: AudioProcessingState.completed,
-          playing: false,
-        ),
+        PlaybackState(processingState: .completed, playing: false),
       );
     }
-    playbackState.add(
-      PlaybackState(
-        processingState: AudioProcessingState.idle,
-        playing: false,
-      ),
-    );
+    playbackState.add(PlaybackState(processingState: .idle, playing: false));
   }
 
-  void _clearCurrentSession({bool clearItems = true}) {
+  void _clearCurrentSession({
+    bool clearItems = true,
+    bool forceCompleted = false,
+  }) {
     if (!mediaItem.isClosed) {
       mediaItem.add(null);
     }
@@ -85,7 +81,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     }
     currentHeroTag = null;
     _clearCallbacks();
-    _emitIdleState();
+    _emitIdleState(forceCompleted: forceCompleted);
   }
 
   @override
@@ -205,11 +201,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     return false;
   }
 
-  void setPlaybackState(
-    PlayerStatus status,
-    bool isBuffering,
-    bool isLive,
-  ) {
+  void setPlaybackState(PlayerStatus status, bool isBuffering, bool isLive) {
     if (!enableBackgroundPlay ||
         _item.isEmpty ||
         !PlPlayerController.instanceExists()) {
@@ -225,15 +217,16 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
       processingState = AudioProcessingState.ready;
     }
 
-    final playing = status.isPlaying;
+    final playing = status.isPlaying || isBuffering;
 
     final hasEpisodes = _hasEpisodes();
 
     final controls = <MediaControl>[
       if (!isLive && hasEpisodes) MediaControl.skipToPrevious,
-      MediaControl.rewind.copyWith(
-        androidIcon: 'drawable/ic_player_rewind_10s',
-      ),
+      if (!isLive)
+        MediaControl.rewind.copyWith(
+          androidIcon: 'drawable/ic_player_rewind_10s',
+        ),
       if (playing)
         MediaControl.pause.copyWith(
           androidIcon: 'drawable/ic_player_pause',
@@ -242,9 +235,10 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
         MediaControl.play.copyWith(
           androidIcon: 'drawable/ic_player_play',
         ),
-      MediaControl.fastForward.copyWith(
-        androidIcon: 'drawable/ic_player_fast_forward_10s',
-      ),
+      if (!isLive)
+        MediaControl.fastForward.copyWith(
+          androidIcon: 'drawable/ic_player_fast_forward_10s',
+        ),
       if (!isLive && hasEpisodes) MediaControl.skipToNext,
     ];
 
@@ -265,7 +259,6 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     } else {
       compactIndices = List.generate(controls.length, (i) => i);
     }
-
     playbackState.add(
       playbackState.value.copyWith(
         processingState: isBuffering
@@ -277,8 +270,8 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
         systemActions: {
           MediaAction.seek,
           if (!isLive && hasEpisodes) MediaAction.skipToPrevious,
-          MediaAction.rewind,
-          MediaAction.fastForward,
+          if (!isLive) MediaAction.rewind,
+          if (!isLive) MediaAction.fastForward,
           if (!isLive && hasEpisodes) MediaAction.skipToNext,
         },
       ),
@@ -420,7 +413,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
 
   void clear() {
     if (!enableBackgroundPlay) return;
-    _clearCurrentSession();
+    _clearCurrentSession(forceCompleted: true);
   }
 
   void onPositionChange(Duration position) {
@@ -430,10 +423,6 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
       return;
     }
 
-    playbackState.add(
-      playbackState.value.copyWith(
-        updatePosition: position,
-      ),
-    );
+    playbackState.add(playbackState.value.copyWith(updatePosition: position));
   }
 }
