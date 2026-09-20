@@ -526,6 +526,22 @@ class HeaderControlState extends State<HeaderControl>
                         )
                       : null,
                 ),
+                // 与页面 popScope 的 canPop 条件一致：小窗靠 pop 本页收起，
+                // 不能 pop 的形态不提供入口；系统 PiP 中没有控制栏，一并排除
+                if (videoDetailCtr.canPopPage(isPortrait: isPortrait) &&
+                    !plPlayerController.isPipMode)
+                  ListTile(
+                    dense: true,
+                    onTap: () {
+                      Get.back();
+                      videoDetailCtr.onRequestInAppPip?.call();
+                    },
+                    leading: const Icon(
+                      Icons.picture_in_picture_alt_outlined,
+                      size: 20,
+                    ),
+                    title: const Text('应用内画中画', style: titleStyle),
+                  ),
                 if (!isFileSource) ...[
                   ListTile(
                     dense: true,

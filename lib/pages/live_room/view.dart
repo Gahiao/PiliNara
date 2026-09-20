@@ -81,6 +81,10 @@ class _LiveRoomPageState extends State<LiveRoomPage>
   // 标志位：是否正在进入 PiP 模式
   bool _isEnteringPipMode = false;
 
+  // 标志位：三点菜单「应用内画中画」发起的 pop，一次性；由 _onPopInvokedWithResult 消费，
+  // 让本次收起绕过设置开关
+  bool _manualPipRequested = false;
+
   late final GlobalKey pageKey = GlobalKey();
   late final GlobalKey chatKey = GlobalKey();
   late final GlobalKey scKey = GlobalKey();
@@ -201,6 +205,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
     plPlayerController = _liveRoomController.plPlayerController
       ..addStatusLister(playerListener);
     PlPlayerController.setPlayCallBack(plPlayerController.play);
+    _liveRoomController.onRequestInAppPip = _enterLivePipManually;
 
     if (isReturningFromPip) {
       _liveRoomController.isInPipMode.value = false;
@@ -383,6 +388,9 @@ class _LiveRoomPageState extends State<LiveRoomPage>
       PlPlayerController.setPlayCallBack(null);
     }
     plPlayerController.removeStatusLister(playerListener);
+    if (_liveRoomController.onRequestInAppPip == _enterLivePipManually) {
+      _liveRoomController.onRequestInAppPip = null;
+    }
     if (!isInLivePip && !_isEnteringPipMode) {
       plPlayerController.dispose();
     }
@@ -584,7 +592,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
       );
     }
     final Widget result = popScope(
-      canPop: !isFullScreen && !plPlayerController.isDesktopPip,
+      canPop: _canPopPage,
       onPopInvokedWithResult: _onPopInvokedWithResult,
       child: player,
     );
@@ -595,9 +603,17 @@ class _LiveRoomPageState extends State<LiveRoomPage>
         : result;
   }
 
+  // 本页能否被 pop 收起：popScope 的 canPop 与手动小窗入口共用同一判定
+  bool get _canPopPage => _liveRoomController.canPopPage;
+
   void _onPopInvokedWithResult(bool didPop, Object? result) {
     if (didPop) {
-      _startLivePipIfNeeded();
+      final manual = _manualPipRequested;
+      _manualPipRequested = false;
+      _startLivePipIfNeeded(manual: manual);
+    } else {
+      // pop 被拦下，手动小窗的一次性豁免不能留给下一次普通返回
+      _manualPipRequested = false;
     }
     plPlayerController.onPopInvokedWithResult(
       didPop,
@@ -606,8 +622,40 @@ class _LiveRoomPageState extends State<LiveRoomPage>
     );
   }
 
-  bool _shouldStartLivePip() {
-    if (!Pref.enableInAppPip) {
+  /// 三点菜单「应用内画中画」：不依赖设置开关，把当前直播临时收进小窗。
+  /// 复用返回键收起路径（pop → _onPopInvokedWithResult → _startLivePipIfNeeded），
+  /// 只是提前把条件凑齐：暂停的先续播、嵌套的视频/直播页先静默移除
+  Future<void> _enterLivePipManually() async {
+    if (!mounted || _isEnteringPipMode || _manualPipRequested) {
+      return;
+    }
+    if (plPlayerController.videoController != null &&
+        !plPlayerController.playerStatus.isPlaying) {
+      // 手动进小窗是明确的播放意图
+      await plPlayerController.play();
+      if (!mounted) {
+        return;
+      }
+    }
+    if (!_canPopPage || !_shouldStartLivePip(manual: true)) {
+      SmartDialog.showToast('当前无法进入小窗');
+      return;
+    }
+    if (PipOverlayService.removeNestedVideoLikeRoutesBelow(context) > 0) {
+      // 被移除的页面要到下一帧才卸载并归还各自的播放器计数；等它们落地再 pop，
+      // 否则小窗按 X 关闭时计数未归零、播放器不会真正销毁
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) {
+        return;
+      }
+    }
+    _manualPipRequested = true;
+    Get.back();
+  }
+
+  /// [manual] 为三点菜单手动触发：不受设置开关约束
+  bool _shouldStartLivePip({bool manual = false}) {
+    if (!manual && !Pref.enableInAppPip) {
       return false;
     }
     if (LivePipOverlayService.isInPipMode) {
@@ -626,8 +674,8 @@ class _LiveRoomPageState extends State<LiveRoomPage>
     return true;
   }
 
-  void _startLivePipIfNeeded() {
-    if (!_shouldStartLivePip()) {
+  void _startLivePipIfNeeded({bool manual = false}) {
+    if (!_shouldStartLivePip(manual: manual)) {
       return;
     }
     // 设置小窗模式标志

@@ -129,6 +129,17 @@ class VideoDetailController extends GetxController
   // 是否正在进入应用内小窗
   bool isEnteringPip = false;
 
+  // 三点菜单「应用内画中画」的触发入口，由视频页 State 绑定：
+  // 小窗流程依赖页面的路由生命周期（pop 收起），controller 自身无法发起
+  VoidCallback? onRequestInAppPip;
+
+  /// 视频页能否被 pop：页面 popScope 的 canPop 与三点菜单小窗入口共用。
+  /// 横屏模式下竖屏才可 pop（横屏由播放器自己接管返回）
+  bool canPopPage({required bool isPortrait}) =>
+      !plPlayerController.isFullScreen.value &&
+      !plPlayerController.isDesktopPip &&
+      (horizontalScreen || isPortrait);
+
   /// tabs相关配置
   late TabController tabCtr;
 

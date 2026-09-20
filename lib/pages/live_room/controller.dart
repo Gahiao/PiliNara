@@ -76,6 +76,14 @@ class LiveRoomController extends GetxController {
   // PiP 模式标志
   RxBool isInPipMode = false.obs;
 
+  // 三点菜单「应用内画中画」的触发入口，由直播页 State 绑定：
+  // 小窗流程依赖页面的路由生命周期（pop 收起），controller 自身无法发起
+  VoidCallback? onRequestInAppPip;
+
+  /// 直播页能否被 pop：页面 popScope 的 canPop 与三点菜单小窗入口共用
+  bool get canPopPage =>
+      !plPlayerController.isFullScreen.value && !plPlayerController.isDesktopPip;
+
   Timer? liveTimeTimer;
 
   void startLiveTimer() {
