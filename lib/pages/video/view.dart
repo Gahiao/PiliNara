@@ -2928,13 +2928,31 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
 
   /// 三点菜单「应用内画中画」：不依赖设置开关，把当前视频临时收进小窗。
   /// 复用返回键收起路径（pop → _onPopInvokedWithResult → _startInAppPipIfNeeded），
-  /// 只是提前把门禁条件凑齐：暂停的先续播、嵌套的视频/直播页先静默移除
+  /// 只是提前把门禁条件凑齐：全屏的先退全屏、暂停的先续播、嵌套页先静默移除
   Future<void> _enterInAppPipManually() async {
     if (!mounted || _isEnteringPipMode || _manualPipRequested) {
       return;
     }
     plPlayerController ??= videoDetailController.plPlayerController;
     final controller = plPlayerController!;
+    if (controller.isFullScreen.value) {
+      // 全屏时返回键语义是"退出全屏"，页面本就不能被 pop；且直接 pop 会把
+      // 播放器单例的 isFullScreen 留在 true、方向也不复位（resetScreenRotation
+      // 只在 triggerFullScreen 内调用）。先退回半屏再走正常的收起流程
+      await controller.triggerFullScreen(status: false);
+      if (!mounted) {
+        return;
+      }
+      // 横屏退出全屏会把设备转回竖屏，由 OS 异步完成；isPortrait 是 _canPopPage
+      // 的一项，未等到就判定会被误拒。这里直接用待判定的条件本身当落定信号：
+      // 竖屏视频退出全屏不转屏，isPortrait 已为 true，只等保底的一帧；
+      // 方向本就未变时（如 fullScreenMode=.none 的横屏手机）等不到，超时后
+      // 由下面的判定拒绝——这种形态本就不该 pop 本页
+      await PipOverlayService.awaitLayoutSettled(() => _canPopPage);
+      if (!mounted) {
+        return;
+      }
+    }
     if (controller.videoController != null &&
         !controller.playerStatus.isPlaying) {
       // 手动进小窗是明确的播放意图；播完的从头播

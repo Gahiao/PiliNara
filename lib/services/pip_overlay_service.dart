@@ -123,6 +123,26 @@ class PipOverlayService {
     return nested.length;
   }
 
+  /// 等待布局落定：[isReady] 成立即返回，超时则不再等。
+  /// 退出全屏后设备转屏由 OS 异步完成，MediaQuery（isPortrait/尺寸）要再过
+  /// 若干帧才更新；此时立即判定可 pop 状态或量取源矩形会拿到全屏时的旧值。
+  /// 超时后由调用方按当前状态决定（该拒绝就拒绝）
+  ///
+  /// 用时间而非帧数设限：转屏耗时与显示刷新率无关，高刷屏上同样的帧数
+  /// 只有几分之一的时间，按帧计会提前放弃
+  static Future<void> awaitLayoutSettled(
+    bool Function() isReady, {
+    Duration timeout = const Duration(milliseconds: 600),
+  }) async {
+    // 至少等一帧：退出全屏的状态变更在下一帧才重新布局，此刻量取的矩形
+    // 仍是全屏几何；即使 isReady 立刻为真也要让这一帧过去
+    await WidgetsBinding.instance.endOfFrame;
+    final stopwatch = Stopwatch()..start();
+    while (!isReady() && stopwatch.elapsed < timeout) {
+      await WidgetsBinding.instance.endOfFrame;
+    }
+  }
+
   static void _setEnteringPipFlag(dynamic controller, bool value) {
     try {
       controller.isEnteringPip = value;

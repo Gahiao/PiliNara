@@ -624,10 +624,30 @@ class _LiveRoomPageState extends State<LiveRoomPage>
 
   /// 三点菜单「应用内画中画」：不依赖设置开关，把当前直播临时收进小窗。
   /// 复用返回键收起路径（pop → _onPopInvokedWithResult → _startLivePipIfNeeded），
-  /// 只是提前把条件凑齐：暂停的先续播、嵌套的视频/直播页先静默移除
+  /// 只是提前把条件凑齐：全屏的先退全屏、暂停的先续播、嵌套页先静默移除
   Future<void> _enterLivePipManually() async {
     if (!mounted || _isEnteringPipMode || _manualPipRequested) {
       return;
+    }
+    if (plPlayerController.isFullScreen.value) {
+      // 全屏时返回键语义是"退出全屏"，页面本就不能被 pop；且直接 pop 会把
+      // 播放器单例的 isFullScreen 留在 true、方向也不复位。先退回半屏再走正常流程
+      final rectBeforeExit = _livePlayerRect();
+      await plPlayerController.triggerFullScreen(status: false);
+      if (!mounted) {
+        return;
+      }
+      // 退出全屏会切到半屏的布局分支（与方向是否变化无关），布局落定前
+      // _livePlayerRect() 量的还是全屏时的整屏位置，收起动画会从整屏开始。
+      // 以播放器矩形变化为落定信号；不能拿 MediaQuery.size 当信号——
+      // 移动端退全屏只是隐藏系统栏，size 并不变
+      // 量不到基线矩形（播放器未就绪，收起本来也不会有动画）时不必等
+      await PipOverlayService.awaitLayoutSettled(
+        () => rectBeforeExit == null || _livePlayerRect() != rectBeforeExit,
+      );
+      if (!mounted) {
+        return;
+      }
     }
     if (plPlayerController.videoController != null &&
         !plPlayerController.playerStatus.isPlaying) {

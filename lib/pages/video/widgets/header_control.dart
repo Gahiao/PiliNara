@@ -526,10 +526,12 @@ class HeaderControlState extends State<HeaderControl>
                         )
                       : null,
                 ),
-                // 与页面 popScope 的 canPop 条件一致：小窗靠 pop 本页收起，
-                // 不能 pop 的形态不提供入口；系统 PiP 中没有控制栏，一并排除
-                if (videoDetailCtr.canPopPage(isPortrait: isPortrait) &&
-                    !plPlayerController.isPipMode)
+                // 全屏下也提供入口（点击后先退全屏再收起）；系统 PiP 中没有控制栏，
+                // 排除。非全屏时仍按 canPopPage 收口，不摆出点了只会 toast 的入口
+                if (!plPlayerController.isDesktopPip &&
+                    !plPlayerController.isPipMode &&
+                    (isFullScreen ||
+                        videoDetailCtr.canPopPage(isPortrait: isPortrait)))
                   ListTile(
                     dense: true,
                     onTap: () {

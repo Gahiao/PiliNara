@@ -288,9 +288,10 @@ class _LiveHeaderControlState extends State<LiveHeaderControl>
                         ],
                       ),
                     ),
-                  // 与页面 popScope 的 canPop 条件一致：小窗靠 pop 本页收起，
-                  // 不能 pop 的形态不提供入口；系统 PiP 中没有控制栏，一并排除
-                  if (liveController.canPopPage && !plPlayerController.isPipMode)
+                  // 全屏下也能进入（点击后先退全屏再收起）；系统 PiP 中没有控制栏，排除
+                  // 桌面小窗形态下不能 pop 本页，不提供入口
+                  if (!plPlayerController.isDesktopPip &&
+                      !plPlayerController.isPipMode)
                     PopupMenuItem(
                       height: 42,
                       onTap: () => liveController.onRequestInAppPip?.call(),
