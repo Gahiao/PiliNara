@@ -7,11 +7,11 @@ import 'package:PiliPlus/common/widgets/selection_text.dart';
 import 'package:PiliPlus/http/browser_ua.dart';
 import 'package:PiliPlus/main.dart' show webViewEnvironment;
 import 'package:PiliPlus/models/common/webview_menu_type.dart';
+import 'package:PiliPlus/plugin/linux_webview.dart';
 import 'package:PiliPlus/utils/app_scheme.dart';
 import 'package:PiliPlus/utils/cache_manager.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
 import 'package:PiliPlus/utils/linux_cookie_manager.dart';
-import 'package:PiliPlus/plugin/linux_webview.dart';
 import 'package:PiliPlus/utils/login_utils.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
@@ -31,18 +31,16 @@ class WebviewPage extends StatefulWidget {
     this.title,
   });
 
-  final String? url;
-
   // note
   final int? oid;
   final String? title;
+  final String? url;
 
   @override
   State<WebviewPage> createState() => _WebviewPageState();
 }
 
 class _WebviewPageState extends State<WebviewPage> with RouteAware {
-  late final String _url;
   late String _currentUrl;
   late final String userAgent;
   late final RxString _title;
@@ -57,9 +55,8 @@ class _WebviewPageState extends State<WebviewPage> with RouteAware {
   void initState() {
     super.initState();
     final parameters = Get.parameters;
-    _url = (widget.url ?? parameters['url']!).http2https;
-    _currentUrl = _url;
-    _title = _url.obs;
+    _currentUrl = (widget.url ?? parameters['url']!).http2https;
+    _title = _currentUrl.obs;
     userAgent = switch (parameters['uaType']) {
       'pc' => BrowserUa.pc,
       'mob' => BrowserUa.mob,
@@ -244,7 +241,7 @@ class _WebviewPageState extends State<WebviewPage> with RouteAware {
   }
 
   List<Map<String, dynamic>> _getLinuxUserScripts() {
-    final shouldInjectCookie = LinuxCookieManager.isBiliDomain(_url);
+    final shouldInjectCookie = LinuxCookieManager.isBiliDomain(_currentUrl);
     final cookieJs = shouldInjectCookie
         ? LinuxCookieManager.generateCookieInjectionJs()
         : '';
@@ -256,7 +253,7 @@ class _WebviewPageState extends State<WebviewPage> with RouteAware {
           'injectionTime': 0, // start
           'forAllFrames': true,
         },
-      if (_url.startsWith('https://www.bilibili.com/h5/note-app'))
+      if (_currentUrl.startsWith('https://www.bilibili.com/h5/note-app'))
         const {
           'source': """
 document.addEventListener('click', function(e) {
@@ -275,7 +272,7 @@ document.addEventListener('click', function(e) {
           'injectionTime': 1, // end
           'forAllFrames': true,
         },
-      if (_url.startsWith('https://live.bilibili.com'))
+      if (_currentUrl.startsWith('https://live.bilibili.com'))
         const {
           'source': """
 (function() {
@@ -300,13 +297,14 @@ document.addEventListener('click', function(e) {
   }
 
   Widget _buildLinuxView(BuildContext context) {
+    final initUrl = _currentUrl;
     return Scaffold(
       appBar: widget.url != null
           ? null
           : AppBar(
               title: Obx(
                 () => Text(
-                  _title.value.isNotEmpty ? _title.value : _url,
+                  _title.value.isNotEmpty ? _title.value : _currentUrl,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -322,7 +320,7 @@ document.addEventListener('click', function(e) {
               actions: _linuxActions,
             ),
       body: LinuxWebview(
-        initialUrl: _url,
+        initialUrl: _currentUrl,
         userAgent: userAgent,
         userScripts: _getLinuxUserScripts(),
         onWebViewCreated: (ctr) {
@@ -330,7 +328,7 @@ document.addEventListener('click', function(e) {
         },
         onUrlChanged: (u) {
           _currentUrl = u;
-          if (_title.value.isEmpty || _title.value == _url) {
+          if (_title.value.isEmpty || _title.value == _currentUrl) {
             _title.value = u;
           }
         },
@@ -354,7 +352,7 @@ document.addEventListener('click', function(e) {
           }
         },
         onNavigationRequest: (u) {
-          if (u == _url) return;
+          if (u == initUrl) return;
           final uri = Uri.tryParse(u);
           final isCustomScheme = _prefixRegex.hasMatch(u);
 
@@ -385,7 +383,7 @@ document.addEventListener('click', function(e) {
           : AppBar(
               title: Obx(
                 () => Text(
-                  _title.value.isNotEmpty ? _title.value : _url,
+                  _title.value.isNotEmpty ? _title.value : _currentUrl,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -416,7 +414,7 @@ document.addEventListener('click', function(e) {
                   mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
                 ),
                 initialUrlRequest: URLRequest(
-                  url: WebUri.uri(Uri.tryParse(_url) ?? Uri()),
+                  url: WebUri.uri(Uri.tryParse(_currentUrl) ?? Uri()),
                 ),
                 onWebViewCreated: (InAppWebViewController controller) {
                   _webViewController = controller

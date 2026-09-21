@@ -793,11 +793,9 @@ class _LivePipWidgetState extends State<LivePipWidget>
                                           child: Center(
                                             child: Obx(() {
                                               final isPlaying =
-                                                  widget
-                                                      .plPlayerController
-                                                      .playerStatus
-                                                      .value ==
-                                                  PlayerStatus.playing;
+                                                  widget.plPlayerController
+                                                          .playerStatus ==
+                                                      PlayerStatus.playing;
                                               return PipControlButton(
                                                 targetSize: bottomControl,
                                                 onTap: () {

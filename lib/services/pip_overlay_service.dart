@@ -1023,9 +1023,7 @@ class _PipWidgetState extends State<PipWidget>
                                                   controller
                                                       ?.plPlayerController;
                                               final isPlaying =
-                                                  plController
-                                                          ?.playerStatus
-                                                          .value ==
+                                                  plController?.playerStatus ==
                                                       PlayerStatus.playing;
                                               return PipControlButton(
                                                 targetSize: bottomControl,

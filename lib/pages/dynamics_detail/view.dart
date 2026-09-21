@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:PiliPlus/common/style.dart';
@@ -251,7 +252,7 @@ class _DynamicDetailPageState
         repostDynId: item.orig?.idStr,
       ),
       onSuccess: () {
-        Future.delayed(
+        Timer(
           const Duration(milliseconds: 500),
           () async {
             if (!mounted) return;

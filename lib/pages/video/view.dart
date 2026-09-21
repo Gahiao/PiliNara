@@ -854,7 +854,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     }
 
     // 2. 计算小窗触发状态
-    final playerStatusBeforePush = plPlayerController?.playerStatus.value;
+    final playerStatusBeforePush = plPlayerController?.playerStatus;
     final bool willStartPip =
         plPlayerController != null &&
         playerStatusBeforePush?.isPlaying == true &&
@@ -939,7 +939,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         // 小窗里的实际状态是用户最新的播放意图（可能在小窗中手动暂停过），
         // 先于关闭小窗记录，交由 didPopNext 末尾统一对账
         videoDetailController.playerStatus =
-            plPlayerController?.playerStatus.value;
+            plPlayerController?.playerStatus;
         // 返回展开：小窗飞回页内播放器位置，非销毁式 stopPip 推迟到握手完成；
         // 无法归位（无小窗会话）则维持旧的瞬时关闭
         if (PipOverlayService.transition.beginRestore()) {
@@ -2894,7 +2894,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
       );
       return false;
     }
-    if (controller.playerStatus.value != PlayerStatus.playing) {
+    if (controller.playerStatus != PlayerStatus.playing) {
       _logSponsorBlock('Reject PiP: video is paused');
       return false;
     }
