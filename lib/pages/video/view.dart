@@ -626,6 +626,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
       return;
     }
     videoDetailController.playedTime = position;
+    videoDetailController.danmakuMaskController.updatePosition(position);
   }
 
   @override
@@ -977,6 +978,11 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     if (LivePipOverlayService.isInPipMode) {
       LivePipOverlayService.stopLivePip(callOnClose: true, immediate: true);
     }
+
+    // 设置页可能改了「智能防挡」开关，回到本页时对齐一次
+    videoDetailController.danmakuMaskController.syncEnabledFromPreference(
+      videoDetailController.plPlayerController.positionInMilliseconds,
+    );
 
     // 如果是从开启新页面方式（Get.toNamed）从小窗手动返回，播放器应已在运行，跳过部分重置逻辑
     final bool fromPip = Get.arguments?['fromPip'] ?? false;

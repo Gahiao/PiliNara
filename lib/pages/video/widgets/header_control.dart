@@ -792,7 +792,11 @@ class HeaderControlState extends State<HeaderControl>
                   dense: true,
                   onTap: () {
                     Get.back();
-                    showSetDanmaku();
+                    showSetDanmaku(
+                      maskController: isFileSource
+                          ? null
+                          : videoDetailCtr.danmakuMaskController,
+                    );
                   },
                   leading: const Icon(CustomIcons.dm_settings, size: 20),
                   title: const Text('弹幕设置', style: titleStyle),

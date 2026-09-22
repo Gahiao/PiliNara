@@ -249,8 +249,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: main
-      resolved-ref: a671d192051f44693228e8f51edf554aa045f6eb
+      ref: "feat/mask-region"
+      resolved-ref: "1fad3fb35c44031657867f9d0bb3214a2d7d052f"
       url: "https://github.com/Starfallan/canvas_danmaku.git"
     source: git
     version: "0.2.6"
@@ -1407,7 +1407,7 @@ packages:
     source: hosted
     version: "1.9.1"
   path_parsing:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: path_parsing
       sha256: "883402936929eac138ee0a45da5b0f2c80f89913e6dc3bf77eb65b84b409c6ca"

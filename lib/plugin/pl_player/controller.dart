@@ -56,7 +56,8 @@ import 'package:PiliPlus/utils/video_utils.dart';
 import 'package:archive/archive.dart' show getCrc32;
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:easy_debounce/easy_throttle.dart';
-import 'package:flutter/foundation.dart' show clampDouble, kDebugMode;
+import 'package:flutter/foundation.dart'
+    show ValueNotifier, clampDouble, kDebugMode;
 import 'package:flutter/services.dart' show HapticFeedback, DeviceOrientation;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
@@ -373,6 +374,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   late RuleFilter filters = Pref.danmakuFilterRule;
   // 关联弹幕控制器
   DanmakuController<DanmakuExtra>? danmakuController;
+
+  /// 弹幕遮挡区（弹幕层坐标系）。PLVideoPlayer 的几何驱动写入，PlDanmaku 消费；
+  /// 两端都以此对象为交接点，画布重建（切 P）时 PlDanmaku 从这里补读。
+  final ValueNotifier<Path?> danmakuMaskPath = ValueNotifier(null);
   bool showDanmaku = true;
   Set<int> dmState = <int>{};
   late final mergeDanmaku = Pref.mergeDanmaku;
@@ -2524,6 +2529,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       showSystemBar();
     }
     danmakuController = null;
+    danmakuMaskPath.value = null;
     _stopOrientationListener();
     _disableAutoEnterPip();
     setPlayCallBack(null);
@@ -2567,6 +2573,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _videoPlayerController = null;
     _videoController = null;
     _activeVideoContextKey = null;
+    danmakuMaskPath.dispose();
     _instance = null;
     videoPlayerServiceHandler?.clear();
   }
