@@ -50,8 +50,8 @@ abstract final class ClipboardBv {
               _bvPattern.firstMatch(url)?.group(0) ?? '',)
 
         );
-        return;
       }
+      return;
     }
     try {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
