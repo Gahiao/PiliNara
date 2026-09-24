@@ -39,8 +39,10 @@ abstract final class ClipboardBv {
 
   static Future<void> _openUrl(String url) async {
     final handled = await PiliScheme.routePushFromUrl(url, selfHandle: true);
-    if (handled) return;
-    if (handled && Pref.showBvToast) SmartDialog.showToast("已到达对应坐标~");
+    if (handled) {
+      if (Pref.showBvToast) SmartDialog.showToast("已到达对应坐标~");
+      return;
+    }
     try {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } catch (_) {}

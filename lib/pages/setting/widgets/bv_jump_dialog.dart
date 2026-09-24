@@ -1,3 +1,4 @@
+import 'package:PiliPlus/grpc/bilibili/app/im/v1.pb.dart';
 import 'package:PiliPlus/pages/setting/widgets/switch_item.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:get/get.dart';
@@ -24,7 +25,7 @@ Future<void> showBvSwitchDialog(BuildContext context) {
               title: '显示Toast',
               subtitle: '跳转视频时显示Toast',
               setKey: SettingBoxKey.showBvToast,
-              defaultVal: true,
+              defaultVal: false,
               contentPadding: EdgeInsets.symmetric(horizontal: 24),
             ),
               SetSwitchItem(
@@ -42,6 +43,7 @@ Future<void> showBvSwitchDialog(BuildContext context) {
           TextButton(
             onPressed: () async {
               await GStorage.setting.put(SettingBoxKey.showBvToast, false);
+              await GStorage.setting.put(SettingBoxKey.jumpDirec, false);
               setState(() => subtreeKey = UniqueKey());
             },
             child: const Text('恢复默认'),
