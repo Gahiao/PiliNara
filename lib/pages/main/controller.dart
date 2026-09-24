@@ -87,12 +87,6 @@ class MainController extends GetxController
     }
   }
 
-  @override
-  void onClose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.onClose();
-
-      
     if (Pref.autoUpdate) {
       Update.checkUpdate();
     }
@@ -405,6 +399,7 @@ class MainController extends GetxController
   void onClose() {
     barOffset?.close();
     controller.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.onClose();
   }
 
