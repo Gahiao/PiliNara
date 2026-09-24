@@ -1711,6 +1711,14 @@ abstract final class Pref {
   static set jumpDirec(bool value) =>
       _setting.put(SettingBoxKey.jumpDirec, value);
 
+  static String get bvJumpToastText =>
+      _setting.get(SettingBoxKey.bvJumpToastText,
+      defaultValue: "已到达对应坐标~");
+
+  static set bvJumpToastText(String value) =>
+      _setting.put(SettingBoxKey.bvJumpToastText, value);
+
+
     static String? get lastBvClipboard =>
     _localCache.get(LocalCacheKey.lastBvClipboard);
 

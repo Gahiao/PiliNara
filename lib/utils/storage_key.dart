@@ -327,6 +327,7 @@ abstract final class SettingBoxKey {
   static const String bvJump = "bvJump";
   static const String showBvToast = "showBvToast";
   static const String jumpDirec = "jumpDirec";
+  static const String bvJumpToastText = "bvJumpToastText";
 }
 
 abstract final class LocalCacheKey {

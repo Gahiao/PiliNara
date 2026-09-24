@@ -1,3 +1,5 @@
+import 'package:PiliPlus/grpc/bilibili/app/viewunite/v1.pbjson.dart';
+import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -40,8 +42,16 @@ abstract final class ClipboardBv {
   static Future<void> _openUrl(String url) async {
     final handled = await PiliScheme.routePushFromUrl(url, selfHandle: true);
     if (handled) {
-      if (Pref.showBvToast) SmartDialog.showToast("已到达对应坐标~");
-      return;
+      if (Pref.showBvToast) {
+        final text = Pref.bvJumpToastText;
+        SmartDialog.showToast(
+          text.isEmpty? "已到达对应坐标~":
+              text.replaceAll('{bvid}',
+              _bvPattern.firstMatch(url)?.group(0) ?? '',)
+
+        );
+        return;
+      }
     }
     try {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
