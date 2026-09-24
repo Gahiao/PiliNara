@@ -1,7 +1,10 @@
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:PiliPlus/utils/app_scheme.dart';
+import 'package:PiliPlus/common/widgets/action_toast.dart';
+
 
 final _urlPattern = RegExp(r'https?://\S*(?:bilibili\.com|b23\.tv)/\S*');
 final _bvPattern = RegExp(r'[Bb][Vv]1[0-9A-Za-z]{9}');
@@ -26,12 +29,18 @@ abstract final class ClipboardBv {
 
     Pref.lastBvClipboard = text;
 
-    await _openUrl(target);
+    if (Pref.jumpDirec) {
+      await _openUrl(target);
+    }else{
+        final ok = await showActionToast(msg: '是否跳转到来自剪切板的视频?', actionText: '跳转');
+        if (ok) await _openUrl(target);
+    }
   }
 
   static Future<void> _openUrl(String url) async {
     final handled = await PiliScheme.routePushFromUrl(url, selfHandle: true);
     if (handled) return;
+    if (handled && Pref.showBvToast) SmartDialog.showToast("已到达对应坐标~");
     try {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } catch (_) {}

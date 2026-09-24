@@ -1704,6 +1704,13 @@ abstract final class Pref {
   static set showBvToast(bool value) =>
       _setting.put(SettingBoxKey.showBvToast, value);
 
+  static bool get jumpDirec =>
+      _setting.get(SettingBoxKey.jumpDirec,
+          defaultValue:false);
+
+  static set jumpDirec(bool value) =>
+      _setting.put(SettingBoxKey.jumpDirec, value);
+
     static String? get lastBvClipboard =>
     _localCache.get(LocalCacheKey.lastBvClipboard);
 

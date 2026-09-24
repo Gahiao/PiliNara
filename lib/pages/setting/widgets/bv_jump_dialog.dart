@@ -2,8 +2,8 @@ import 'package:PiliPlus/pages/setting/widgets/switch_item.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:PiliPlus/utils/storage_key.dart';
 
-const String kShowToastKey = 'showToast';
 
 Future<void> showBvSwitchDialog(BuildContext context) {
   var subtreeKey = UniqueKey();
@@ -13,23 +13,35 @@ Future<void> showBvSwitchDialog(BuildContext context) {
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
         clipBehavior: Clip.hardEdge,
-        title: const Text('显示 Toast'),
+        title: const Text('设置项'),
         contentPadding: const EdgeInsets.only(top: 8, bottom: 4),
         content: KeyedSubtree(
           key: subtreeKey,
-          child: const SetSwitchItem(
-            title: '显示Toast',
-            subtitle: '跳转视频时显示Toast',
-            setKey: kShowToastKey,
-            defaultVal: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 24),
-          ),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SetSwitchItem(
+              title: '显示Toast',
+              subtitle: '跳转视频时显示Toast',
+              setKey: SettingBoxKey.showBvToast,
+              defaultVal: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 24),
+            ),
+              SetSwitchItem(
+                title: '直接跳转',
+                subtitle: '关闭将显示手动跳转选项而不是直接跳转至视频',
+                setKey: SettingBoxKey.jumpDirec,
+                defaultVal: false,
+                contentPadding: EdgeInsets.symmetric(horizontal: 24)
+              ),
+          ],
         ),
+      ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         actions: [
           TextButton(
             onPressed: () async {
-              await GStorage.setting.put(kShowToastKey, true);
+              await GStorage.setting.put(SettingBoxKey.showBvToast, false);
               setState(() => subtreeKey = UniqueKey());
             },
             child: const Text('恢复默认'),
