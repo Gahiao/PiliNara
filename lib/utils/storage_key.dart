@@ -324,7 +324,8 @@ abstract final class SettingBoxKey {
       appFont = 'appFont',
       customAppFont = 'customAppFont',
       customAppFontNames = 'customAppFontNames';
-  static const String BV_jump = "BV_jump";
+  static const String bvJump = "bvJump";
+  static const String showBvToast = "showBvToast";
 }
 
 abstract final class LocalCacheKey {

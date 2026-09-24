@@ -1,6 +1,7 @@
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:PiliPlus/utils/app_scheme.dart';
 
 final _urlPattern = RegExp(r'https?://\S*(?:bilibili\.com|b23\.tv)/\S*');
 final _bvPattern = RegExp(r'[Bb][Vv]1[0-9A-Za-z]{9}');
@@ -9,7 +10,7 @@ abstract final class ClipboardBv {
   
 
   static Future<void> check() async {
-    if (!Pref.BV_jump) return;
+    if (!Pref.bvJump) return;
 
     final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
     if (text == null || text.isEmpty) return;
@@ -29,12 +30,10 @@ abstract final class ClipboardBv {
   }
 
   static Future<void> _openUrl(String url) async {
+    final handled = await PiliScheme.routePushFromUrl(url, selfHandle: true);
+    if (handled) return;
     try {
-      await launchUrl(
-        Uri.parse(url),
-        mode: LaunchMode.externalApplication,
-      );
-    } catch (_) {
-    }
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {}
   }
 }

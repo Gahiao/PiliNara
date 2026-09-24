@@ -54,6 +54,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:material_ui/material_ui.dart' hide RefreshIndicator;
+import 'package:PiliPlus/pages/setting/widgets/bv_jump_dialog.dart';
 
 import '../../../utils/storage_key.dart';
 import 'model.dart';
@@ -127,12 +128,18 @@ List<SettingsModel> get extraSettings => [
     ),
   ),
 
-  const SwitchModel(
-    title: "BV跳转",
-    subtitle: "检测剪切板中的BV号并自动跳转",
-    leading: Icon(MdiIcons.motionPlayOutline),
-    setKey: SettingBoxKey.BV_jump,
-    defaultVal: false
+  SplitModel(
+    normalModel: const NormalModel.split(
+      title: "BV跳转",
+      subtitle: "检测剪切板中的BV号并自动跳转",
+      leading: Icon(MdiIcons.motionPlayOutline),
+    ),
+    switchModel: SwitchModel.split(
+      setKey: SettingBoxKey.bvJump,
+      defaultVal: false,
+      onTap: (context) =>
+        showBvSwitchDialog(context),
+    ),
   ),
 
   const SwitchModel(

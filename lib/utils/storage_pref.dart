@@ -1689,13 +1689,20 @@ abstract final class Pref {
           defaultValue: const <String, String>{},
         ),
       );
-  static bool get BV_jump =>
-      _setting.get(SettingBoxKey.BV_jump,
+  static bool get bvJump =>
+      _setting.get(SettingBoxKey.bvJump,
       defaultValue: false);
 
-  static set BV_jump(bool value) =>
-      _setting.put(SettingBoxKey.BV_jump,
+  static set bvJump(bool value) =>
+      _setting.put(SettingBoxKey.bvJump,
       value);
+
+  static bool get showBvToast =>
+      _setting.get(SettingBoxKey.showBvToast,
+          defaultValue:false);
+
+  static set showBvToast(bool value) =>
+      _setting.put(SettingBoxKey.showBvToast, value);
 
     static String? get lastBvClipboard =>
     _localCache.get(LocalCacheKey.lastBvClipboard);
