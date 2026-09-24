@@ -85,7 +85,6 @@ class MainController extends GetxController
     if (state == AppLifecycleState.resumed) {
       Future.delayed(const Duration(milliseconds: 500), ClipboardBv.check);
     }
-  }
 
     if (Pref.autoUpdate) {
       Update.checkUpdate();
