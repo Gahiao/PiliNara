@@ -78,13 +78,6 @@ class MainController extends GetxController
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
     ClipboardBv.check();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      Future.delayed(const Duration(milliseconds: 500), ClipboardBv.check);
-    }
 
     if (Pref.autoUpdate) {
       Update.checkUpdate();
@@ -392,6 +385,13 @@ class MainController extends GetxController
       return true;
     }
     return false;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      Future.delayed(const Duration(milliseconds: 500), ClipboardBv.check);
+    }
   }
 
   @override
