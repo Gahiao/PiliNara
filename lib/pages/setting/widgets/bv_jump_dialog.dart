@@ -43,7 +43,7 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
 
                     SetSwitchItem(
                       title: '每次启动时跳转',
-                      subtitle: '启动时将忽略上次的BV号/链接' + (Pref.jumpDirec ? '直接跳转': '并显示跳转选项'),
+                      subtitle: '启动时将忽略上次的BV号/链接' + (Pref.jumpDirec ? '然后直接跳转': '并显示跳转选项'),
                       setKey: SettingBoxKey.shouldJumpEveryTime,
                       defaultVal: false,
                       contentPadding: EdgeInsets.symmetric(horizontal: 24),
