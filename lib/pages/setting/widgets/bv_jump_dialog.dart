@@ -96,6 +96,7 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
                 SettingBoxKey.bvJumpToastText,
                 kToastTextDefault,
               );
+              await GStorage.setting.put(SettingBoxKey.shouldJumpEveryTime, false);
               textController.text = kToastTextDefault;
               setState(() => subtreeKey = UniqueKey());
             },
