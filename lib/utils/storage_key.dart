@@ -140,6 +140,7 @@ abstract final class SettingBoxKey {
       antiGoodsDyn = 'antiGoodsDyn',
       removeBlockedDyn = 'removeBlockedDyn',
       removeOnlyFansVideoDyn = 'removeOnlyFansVideoDyn',
+      removeDynVideoDyn = 'removeDynVideoDyn',
       antiGoodsReply = 'antiGoodsReply',
       replyMinLevel = 'replyMinLevel',
       keepUpOwnerReply = 'keepUpOwnerReply',
