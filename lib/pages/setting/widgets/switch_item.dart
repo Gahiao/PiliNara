@@ -69,7 +69,6 @@ class _SetSwitchItemState extends State<SetSwitchItem> {
       );
       if (!val) return;
     }
-
     await GStorage.setting.put(widget.setKey, val);
 
     widget.onChanged?.call(val);

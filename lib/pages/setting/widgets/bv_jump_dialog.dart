@@ -15,10 +15,6 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
       defaultValue: kToastTextDefault,
     ),
   );
-  String subtitleJumpText = '再次显示是否跳转选项';
-  if (Pref.jumpDirec) {
-    subtitleJumpText = '直接跳转';
-  }
 
   final res = await showDialog<String>(
     context: context,
@@ -47,18 +43,19 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
 
                     SetSwitchItem(
                       title: '每次启动时跳转',
-                      subtitle: '启动时忽略上次的BV号(或链接等)$subtitleJumpText',
+                      subtitle: '启动时忽略上次的BV号(或链接等)' + (Pref.jumpDirec ? '再次显示手动跳转选项': '直接跳转'),
                       setKey: SettingBoxKey.shouldJumpEveryTime,
                       defaultVal: false,
                       contentPadding: EdgeInsets.symmetric(horizontal: 24),
                     ),
 
-                    const SetSwitchItem(
+                    SetSwitchItem(
                       title: '直接跳转',
                       subtitle: '关闭将显示手动跳转选项而不是直接跳转至视频',
                       setKey: SettingBoxKey.jumpDirec,
                       defaultVal: false,
                       contentPadding: EdgeInsets.symmetric(horizontal: 24),
+                      onChanged: (_) => setState(() {}),
                     ),
                   ],
                 ),
