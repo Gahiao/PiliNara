@@ -311,17 +311,22 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
             // 只保存系统音量，不改变播放器音量和显示指示器
             plPlayerController.systemVolume.value =
                 (await FlutterVolumeController.getVolume())!;
-            FlutterVolumeController.addListener((double value) {
-              if (mounted && !plPlayerController.volumeInterceptEventStream) {
-                // 只更新系统音量记录，不影响播放器音量和指示器显示
-                plPlayerController.systemVolume.value = value;
-              }
-            }, emitOnStart: false);
+            FlutterVolumeController.addListener(
+              (double value) {
+                if (mounted && !plPlayerController.volumeInterceptEventStream) {
+                  // 只更新系统音量记录，不影响播放器音量和指示器显示
+                  plPlayerController.systemVolume.value = value;
+                }
+              },
+              category: AudioSessionCategory.playback,
+              emitOnStart: false,
+            );
           } else {
             FlutterVolumeController.updateShowSystemUI(true);
             _getCurrVolume();
             FlutterVolumeController.addListener(
               _onVolumeChanged,
+              category: AudioSessionCategory.playback,
               emitOnStart: false,
             );
           }
