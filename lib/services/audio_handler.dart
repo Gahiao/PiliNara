@@ -44,7 +44,6 @@ typedef _StatusConfig = (
   PlayerStatus status,
   bool isBuffering,
   bool isLive,
-  Duration position,
   double speed,
 );
 
@@ -67,9 +66,8 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     onSkipToPrevious = null;
   }
 
-  void _emitIdleState({bool forceCompleted = false}) {
-    if (forceCompleted ||
-        playbackState.value.processingState == AudioProcessingState.idle) {
+  void _emitIdleState() {
+    if (playbackState.value.processingState == AudioProcessingState.idle) {
       playbackState.add(
         PlaybackState(processingState: .completed, playing: false),
       );
@@ -77,10 +75,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     playbackState.add(PlaybackState(processingState: .idle, playing: false));
   }
 
-  void _clearCurrentSession({
-    bool clearItems = true,
-    bool forceCompleted = false,
-  }) {
+  void _clearCurrentSession({bool clearItems = true}) {
     if (!mediaItem.isClosed) {
       mediaItem.add(null);
     }
@@ -88,9 +83,10 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
       _item.clear();
     }
     currentHeroTag = null;
+    _lastPos = null;
     _lastConfig = null;
     _clearCallbacks();
-    _emitIdleState(forceCompleted: forceCompleted);
+    _emitIdleState();
   }
 
   @override
@@ -156,14 +152,6 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> pause() {
-    final state = playbackState.value;
-    _updateState(
-      .ready,
-      false,
-      PlPlayerController.instance?.isLive ?? false,
-      position: state.position,
-      speed: state.speed,
-    );
     return onPause?.call() ??
         PlPlayerController.pauseIfExists() ??
         Future.syncValue(null);
@@ -213,6 +201,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     return false;
   }
 
+  Duration? _lastPos;
   _StatusConfig? _lastConfig;
   void onUpdateState(
     PlayerStatus status,
@@ -228,8 +217,17 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
       return;
     }
 
-    final newConfig = (status, isBuffering, isLive, position, speed);
-    if (_lastConfig == newConfig) return;
+    if (onPlay != null && debugLabel == 'onVideoPaused') return;
+
+    final newConfig = (status, isBuffering, isLive, speed);
+    if (_lastConfig == newConfig) {
+      if (_lastPos != null) {
+        final pos = position.inSeconds;
+        final lastPos = _lastPos!.inSeconds;
+        _lastPos = position;
+        if (pos == lastPos && pos != 0) return;
+      }
+    }
     _lastConfig = newConfig;
 
     final AudioProcessingState processingState;
@@ -445,8 +443,13 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     _clearCurrentSession(clearItems: false);
   }
 
+  void clearIfNeeded() {
+    if (!enableBackgroundPlay) return;
+    if (_item.isEmpty) clear();
+  }
+
   void clear() {
     if (!enableBackgroundPlay) return;
-    _clearCurrentSession(forceCompleted: true);
+    _clearCurrentSession();
   }
 }
