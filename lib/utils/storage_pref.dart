@@ -1712,6 +1712,14 @@ abstract final class Pref {
       _setting.put(SettingBoxKey.bvJump,
       value);
 
+  static bool get shouldJumpEveryTime =>
+      _setting.get(SettingBoxKey.shouldJumpEveryTime,
+          defaultValue: false);
+
+  static set shouldJumpEveryTime(bool value) =>
+      _setting.put(SettingBoxKey.shouldJumpEveryTime,
+          value);
+
   static bool get showBvToast =>
       _setting.get(SettingBoxKey.showBvToast,
           defaultValue:false);

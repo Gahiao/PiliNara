@@ -1,5 +1,3 @@
-import 'package:PiliPlus/grpc/bilibili/app/viewunite/v1.pbjson.dart';
-import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -14,14 +12,15 @@ final _bvPattern = RegExp(r'[Bb][Vv]1[0-9A-Za-z]{9}');
 abstract final class ClipboardBv {
   
 
-  static Future<void> check() async {
+  static Future<void> check([bool ilast = false]) async {
     if (!Pref.bvJump) return;
 
     final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
     if (text == null || text.isEmpty) return;
 
-    if (text == Pref.lastBvClipboard) return;
-
+    if (!ilast) {
+      if (text == Pref.lastBvClipboard) return;
+    }
     final url = _urlPattern.firstMatch(text)?.group(0);
     final bvid = _bvPattern.firstMatch(text)?.group(0);
     final target = url ??

@@ -2,6 +2,7 @@ import 'package:PiliPlus/pages/setting/widgets/switch_item.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:PiliPlus/utils/storage_pref.dart';
 
 const String kToastTextDefault = '已到达对应坐标~';
 
@@ -14,6 +15,10 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
       defaultValue: kToastTextDefault,
     ),
   );
+  String subtitleJumpText = '再次显示是否跳转选项';
+  if (Pref.jumpDirec) {
+    subtitleJumpText = '直接跳转';
+  }
 
   final res = await showDialog<String>(
     context: context,
@@ -29,17 +34,26 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
             children: [
               KeyedSubtree(
                 key: subtreeKey,
-                child: const Column(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SetSwitchItem(
+                    const SetSwitchItem(
                       title: '显示Toast',
                       subtitle: '跳转视频时显示Toast',
                       setKey: SettingBoxKey.showBvToast,
                       defaultVal: false,
                       contentPadding: EdgeInsets.symmetric(horizontal: 24),
                     ),
+
                     SetSwitchItem(
+                      title: '每次启动时跳转',
+                      subtitle: '启动时忽略上次的BV号(或链接等)$subtitleJumpText',
+                      setKey: SettingBoxKey.shouldJumpEveryTime,
+                      defaultVal: false,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 24),
+                    ),
+
+                    const SetSwitchItem(
                       title: '直接跳转',
                       subtitle: '关闭将显示手动跳转选项而不是直接跳转至视频',
                       setKey: SettingBoxKey.jumpDirec,
@@ -59,7 +73,7 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
                   maxLength: 100,
                   decoration: const InputDecoration(
                     labelText: 'Toast 文本',
-                    hintText: '已跳转到 {bvid}',
+                    hintText: '已到坐标: {bvid}',
                     helperText: '可用占位符：{bvid}',
                     counterText: '',
                     border: OutlineInputBorder(
@@ -89,7 +103,7 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, textController.text),
-            child: const Text('保存'),
+            child: const Text('关闭'),
           ),
         ],
       ),

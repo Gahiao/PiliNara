@@ -78,7 +78,7 @@ class MainController extends GetxController
   void onInit() {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
-    ClipboardBv.check();
+    ClipboardBv.check(Pref.shouldJumpEveryTime);
 
     if (Pref.autoUpdate) {
       Update.checkUpdate();
