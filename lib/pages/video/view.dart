@@ -195,9 +195,12 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     }
     PortraitFeedService.instance.visit(videoDetailController.bvid);
     videoDetailController.plPlayerController
+      ..onPortraitSlideEnabled = _enablePortraitSlide
       ..onPortraitSlideUp = _portraitSlideNext
       ..onPortraitSlideDown = _portraitSlidePrev;
   }
+
+  bool _enablePortraitSlide() => _portraitSlideMode;
 
   void _disposePortraitSlide() {
     final ctr = videoDetailController.plPlayerController;
