@@ -165,9 +165,18 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
           PlatformUtils.isMobile &&
           videoDetailController.isUgc;
 
+  bool get _isPortraitVideo {
+    final ctr = videoDetailController.plPlayerController;
+    final int? w = ctr.width;
+    final int? h = ctr.height;
+    if (w != null && h != null && w > 0 && h > 0) {
+      return h > w;
+    }
+    return videoDetailController.isVertical.value;
+  }
+
   bool get _portraitSlideMode =>
-          _portraitSlideSupported &&
-          videoDetailController.isVertical.value;
+      _portraitSlideSupported && _isPortraitVideo;
 
   bool get _portraitSlideActive =>
       _portraitSlideMode && isPortrait && isFullScreen;
@@ -2085,7 +2094,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
           left: 0,
           right: 0,
           bottom: MediaQuery.viewPaddingOf(context).bottom + 96,
-          child: IgnorePointer(
+       child: IgnorePointer(
             child: Obx(() {
               final ctr = videoDetailController.plPlayerController;
               final bool show =
