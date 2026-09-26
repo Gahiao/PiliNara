@@ -155,10 +155,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   VoidCallback? onPortraitSlideUp;
   VoidCallback? onPortraitSlideDown;
+  bool Function()? onPortraitSlideEnabled;
 
   bool get enablePortraitSlideVideo =>
       Pref.portraitSlideVideo &&
           onPortraitSlideUp != null &&
+          onPortraitSlideEnabled?.call() == true &&
           isFullScreen.value &&
           !isLive;
 

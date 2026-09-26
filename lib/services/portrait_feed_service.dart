@@ -1,21 +1,27 @@
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/search.dart';
 import 'package:PiliPlus/http/video.dart';
 import 'package:PiliPlus/models/model_hot_video_item.dart';
+import 'package:PiliPlus/models_new/video/video_detail/dimension.dart';
 
 class PortraitFeedItem {
-  const PortraitFeedItem({
+  PortraitFeedItem({
     required this.bvid,
     this.cid,
     this.aid,
     this.cover,
     this.title,
+    this.dimension,
   });
 
   final String bvid;
-  final int? cid;
+  int? cid;
   final int? aid;
   final String? cover;
   final String? title;
+  Dimension? dimension;
+
+  bool get isVertical => dimension?.isVertical == true;
 }
 
 class PortraitFeedService {
@@ -24,6 +30,7 @@ class PortraitFeedService {
   static final PortraitFeedService instance = PortraitFeedService._();
 
   static const int _maxHistory = 50;
+  static const int _maxProbe = 10;
 
   final List<PortraitFeedItem> _queue = [];
   final List<PortraitFeedItem> _history = [];
@@ -72,26 +79,57 @@ class PortraitFeedService {
   }
 
   Future<PortraitFeedItem?> next({required String currentBvid}) async {
-    PortraitFeedItem? take() {
-      while (_queue.isNotEmpty) {
-        final item = _queue.removeAt(0);
-        if (item.bvid == currentBvid) {
-          continue;
-        }
-        if (_history.any((e) => e.bvid == item.bvid)) {
-          continue;
-        }
+    for (int i = 0; i < _maxProbe; i++) {
+      var item = _take(currentBvid);
+      if (item == null) {
+        await _fill(bvid: currentBvid);
+        item = _take(currentBvid);
+      }
+      if (item == null) {
+        return null;
+      }
+      if (await _ensureVertical(item)) {
         return item;
       }
-      return null;
     }
+    return null;
+  }
 
-    final item = take();
-    if (item != null) {
+  PortraitFeedItem? _take(String currentBvid) {
+    while (_queue.isNotEmpty) {
+      final item = _queue.removeAt(0);
+      if (item.bvid == currentBvid) {
+        continue;
+      }
+      if (_history.any((e) => e.bvid == item.bvid)) {
+        continue;
+      }
       return item;
     }
-    await _fill(bvid: currentBvid);
-    return take();
+    return null;
+  }
+
+  Future<bool> _ensureVertical(PortraitFeedItem item) async {
+    if (item.isVertical) {
+      return true;
+    }
+    if (item.dimension != null) {
+      return false;
+    }
+    try {
+      final res = await SearchHttp.ab2cWithDimension(
+        aid: item.aid,
+        bvid: item.bvid,
+      );
+      if (res == null) {
+        return false;
+      }
+      item.cid ??= res.cid;
+      item.dimension = res.dimension;
+      return item.isVertical;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _fill({required String bvid}) async {
@@ -110,6 +148,9 @@ class PortraitFeedService {
           if (e.redirectUrl?.isNotEmpty == true) {
             continue;
           }
+          if (e.dimension != null && !e.dimension!.isVertical) {
+            continue;
+          }
           final String? itemBvid = e.bvid;
           if (itemBvid == null || itemBvid.isEmpty) {
             continue;
@@ -121,6 +162,7 @@ class PortraitFeedService {
               aid: e.aid,
               cover: e.cover,
               title: e.title,
+              dimension: e.dimension,
             ),
           );
         }

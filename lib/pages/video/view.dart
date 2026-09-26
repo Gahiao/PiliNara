@@ -160,10 +160,14 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
 
   bool _portraitSliding = false;
 
-  bool get _portraitSlideMode =>
+  bool get _portraitSlideSupported =>
       Pref.portraitSlideVideo &&
           PlatformUtils.isMobile &&
           videoDetailController.isUgc;
+
+  bool get _portraitSlideMode =>
+          _portraitSlideSupported &&
+          videoDetailController.isVertical.value;
 
   bool get _portraitSlideActive =>
       _portraitSlideMode && isPortrait && isFullScreen;
@@ -177,7 +181,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   );
 
   void _setupPortraitSlide() {
-    if (!_portraitSlideMode) {
+    if (!_portraitSlideSupported) {
       return;
     }
     PortraitFeedService.instance.visit(videoDetailController.bvid);
@@ -191,7 +195,8 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     if (ctr.onPortraitSlideUp == _portraitSlideNext) {
       ctr
         ..onPortraitSlideUp = null
-        ..onPortraitSlideDown = null;
+        ..onPortraitSlideDown = null
+        ..onPortraitSlideEnabled = null;
     }
   }
 
@@ -2069,7 +2074,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     final Widget playerWidget = _pipRestoreInFlight
         ? IgnorePointer(child: Opacity(opacity: 0, child: player))
         : player;
-    if (!_portraitSlideMode) {
+    if (!_portraitSlideSupported) {
       return playerWidget;
     }
     return Stack(
@@ -2084,8 +2089,9 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
             child: Obx(() {
               final ctr = videoDetailController.plPlayerController;
               final bool show =
-                  isPortrait &&
-                      ctr.enablePortraitSlideVideo &&
+                  _portraitSlideMode &&
+                      isPortrait &&
+                      isFullScreen &&
                       ctr.showControls.value &&
                       !ctr.controlsLock.value;
               return AnimatedOpacity(
