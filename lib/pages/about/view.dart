@@ -179,6 +179,12 @@ Commit Hash: ${BuildConfig.commitHash}''',
             subtitle: Text(Constants.sourceCodeUrl, style: subTitleStyle),
           ),
           ListTile(
+            onTap: () => PageUtils.launchURL(Constants.basedOnUrl),
+            leading: const Icon(Icons.code),
+            title: const Text('Based On'),
+            subtitle: Text(Constants.basedOnUrl, style: subTitleStyle),
+          ),
+          ListTile(
             onTap: () => PageUtils.launchURL(Constants.upstreamCodeUrl),
             leading: const Icon(Icons.code),
             title: const Text('Upstream Code'),
