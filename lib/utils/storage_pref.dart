@@ -1737,6 +1737,13 @@ abstract final class Pref {
   static set jumpDirec(bool value) =>
       _setting.put(SettingBoxKey.jumpDirec, value);
 
+  static bool get portraitSlideVideo =>
+      _setting.get(SettingBoxKey.portraitSlideVideo,
+          defaultValue:false);
+
+  static set portraitSlideVideo(bool value) =>
+      _setting.put(SettingBoxKey.portraitSlideVideo, value);
+
   static String get bvJumpToastText =>
       _setting.get(SettingBoxKey.bvJumpToastText,
       defaultValue: "已到达对应坐标~");

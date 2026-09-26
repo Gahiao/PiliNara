@@ -63,6 +63,7 @@ import 'package:PiliPlus/services/live_pip_overlay_service.dart';
 import 'package:PiliPlus/services/logger.dart';
 import 'package:PiliPlus/services/pip_overlay_service.dart';
 import 'package:PiliPlus/services/pip_transition_coordinator.dart';
+import 'package:PiliPlus/services/portrait_feed_service.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/services/shutdown_timer_service.dart'
     show shutdownTimerService;
@@ -156,6 +157,97 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
 
   bool get pipNoDanmaku =>
       videoDetailController.plPlayerController.pipNoDanmaku;
+
+  bool _portraitSliding = false;
+
+  bool get _portraitSlideMode =>
+      Pref.portraitSlideVideo &&
+          PlatformUtils.isMobile &&
+          videoDetailController.isUgc;
+
+  bool get _portraitSlideActive =>
+      _portraitSlideMode && isPortrait && isFullScreen;
+
+  PortraitFeedItem get _currentFeedItem => PortraitFeedItem(
+    bvid: videoDetailController.bvid,
+    cid: videoDetailController.cid.value,
+    aid: videoDetailController.aid,
+    cover: videoDetailController.cover.value,
+    title: ugcIntroController.videoDetail.value.title,
+  );
+
+  void _setupPortraitSlide() {
+    if (!_portraitSlideMode) {
+      return;
+    }
+    PortraitFeedService.instance.visit(videoDetailController.bvid);
+    videoDetailController.plPlayerController
+      ..onPortraitSlideUp = _portraitSlideNext
+      ..onPortraitSlideDown = _portraitSlidePrev;
+  }
+
+  void _disposePortraitSlide() {
+    final ctr = videoDetailController.plPlayerController;
+    if (ctr.onPortraitSlideUp == _portraitSlideNext) {
+      ctr
+        ..onPortraitSlideUp = null
+        ..onPortraitSlideDown = null;
+    }
+  }
+
+  Future<bool> _switchPortraitFeed(PortraitFeedItem item) async {
+    PortraitFeedService.instance.markCursor(item);
+    return ugcIntroController.onChangeEpisode(
+      ugc.BaseEpisodeItem(
+        aid: item.aid,
+        bvid: item.bvid,
+        cid: item.cid,
+        title: item.title,
+        cover: item.cover,
+      ),
+      manual: true,
+    );
+  }
+
+  Future<bool> _portraitSlideNext() async {
+    if (_portraitSliding || !_portraitSlideMode) {
+      return false;
+    }
+    _portraitSliding = true;
+    try {
+      final service = PortraitFeedService.instance;
+      service.push(_currentFeedItem);
+      final item = await service.next(currentBvid: videoDetailController.bvid);
+      if (item == null) {
+        SmartDialog.showToast('没有更多视频了');
+        return false;
+      }
+      final ok = await _switchPortraitFeed(item);
+      if (!ok) {
+        service.pop();
+      }
+      return ok;
+    } finally {
+      _portraitSliding = false;
+    }
+  }
+
+  Future<bool> _portraitSlidePrev() async {
+    if (_portraitSliding || !_portraitSlideMode) {
+      return false;
+    }
+    final item = PortraitFeedService.instance.pop();
+    if (item == null) {
+      SmartDialog.showToast('已经是第一个视频');
+      return false;
+    }
+    _portraitSliding = true;
+    try {
+      return await _switchPortraitFeed(item);
+    } finally {
+      _portraitSliding = false;
+    }
+  }
 
   bool isShowing = true;
 
@@ -482,6 +574,8 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     // 必须在 videoDetailController 三条赋值路径（恢复/新建）汇合之后绑定
     videoDetailController.onRequestInAppPip = _enterInAppPipManually;
 
+    _setupPortraitSlide();
+
     if (restoringFromPip) {
       plPlayerController = videoDetailController.plPlayerController;
       final wasPlaying = plPlayerController!.playerStatus.isPlaying;
@@ -698,6 +792,13 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         }
       } catch (_) {}
 
+      if (_portraitSlideActive &&
+          plPlayerController!.playRepeat != PlayRepeat.singleCycle) {
+        if (await _portraitSlideNext()) {
+          return;
+        }
+      }
+
       bool exitFlag = true;
 
       /// 顺序播放 列表循环
@@ -796,6 +897,8 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     plPlayerController
       ?..removeStatusLister(playerListener)
       ..removePositionListener(positionListener);
+
+    _disposePortraitSlide();
 
     // 从小窗展开的新页面会复用同一 controller 并重新绑定，只解绑指向本页的引用
     if (videoDetailController.onRequestInAppPip == _enterInAppPipManually) {
@@ -1091,6 +1194,8 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     // 返回本页后必须重新注册，否则进入全屏时会使用错误 controller 的数据。
     if (Platform.isAndroid || Platform.isIOS) {
       videoDetailController.setupFullScreenQualitySwitch();
+
+      _setupPortraitSlide();
     }
 
     plPlayerController
@@ -1961,9 +2066,52 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     );
     // 归位动画中：透明占位参与布局（供量取目标矩形）但不可见不可点，
     // 小窗是唯一可见端，恢复握手完成后亮出
-    return _pipRestoreInFlight
+    final Widget playerWidget = _pipRestoreInFlight
         ? IgnorePointer(child: Opacity(opacity: 0, child: player))
         : player;
+    if (!_portraitSlideMode) {
+      return playerWidget;
+    }
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        playerWidget,
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: MediaQuery.viewPaddingOf(context).bottom + 96,
+          child: IgnorePointer(
+            child: Obx(() {
+              final ctr = videoDetailController.plPlayerController;
+              final bool show =
+                  isPortrait &&
+                      ctr.enablePortraitSlideVideo &&
+                      ctr.showControls.value &&
+                      !ctr.controlsLock.value;
+              return AnimatedOpacity(
+                opacity: show ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      FontAwesomeIcons.chevronUp,
+                      size: 12,
+                      color: Colors.white70,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      '上滑看下一个 · 下滑看上一个',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
   }
 
   late ThemeData theme;

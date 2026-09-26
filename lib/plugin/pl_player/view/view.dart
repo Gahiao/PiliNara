@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:nativewrappers/_internal/vm/lib/ffi_allocation_patch.dart';
 import 'dart:ui' as ui;
 
 import 'package:PiliPlus/common/assets.dart';
@@ -165,6 +166,11 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   GestureType? _gestureType;
   Offset? _initialFocalPoint;
+  bool _portraitSlideTriggered = false;
+
+  bool get _portraitSlideEnabled =>
+        maxHeight > maxWidth &&
+            plPlayerController.enablePortraitSlideVideo;
 
   bool _pauseDueToPauseUponEnteringBackgroundMode = false;
 
@@ -1174,6 +1180,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   void _onPanStart(ScaleStartDetails details) {
     _gestureType = null;
+    _portraitSlideTriggered = false;
     _initialFocalPoint = details.localFocalPoint;
   }
 
@@ -1239,6 +1246,11 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
         _onHorizontalDragStart();
         _gestureType = .horizontal;
       } else if (dy > 3 * dx) {
+        if (_portraitSlideEnabled) {
+          _gestureType = .portraitSlide;
+          return;
+        }
+
         if (!plPlayerController.enableSlideVolumeBrightness &&
             !plPlayerController.enableSlideFS) {
           return;
@@ -1274,6 +1286,21 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     }
 
     Offset delta = details.focalPointDelta;
+
+    if (_gestureType == .portraitSlide) {
+      if (!_portraitSlideTriggered) {
+        final double dy = details.localFocalPoint.dy - _initialFocalPoint!.dy;
+        if (dy.abs() >= maxHeight * 0.12) {
+          _portraitSlideTriggered = true;
+          if (dy < 0) {
+            plPlayerController.onPortraitSlideUp?.call();
+          } else {
+            plPlayerController.onPortraitSlideDown?.call();
+          }
+        }
+      }
+      return;
+    }
 
     if (_gestureType == .horizontal) {
       // live模式下禁用
@@ -1378,6 +1405,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     if (_gestureType == .horizontal) {
       _onHorizontalDragEnd();
     }
+    _portraitSlideTriggered = false;
     _initialFocalPoint = null;
     // 松手后：若音量已在 1.0，解锁下次可突破；否则重置
     if (plPlayerController.volume.value >= 1.0) {

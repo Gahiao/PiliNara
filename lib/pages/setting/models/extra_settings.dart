@@ -144,6 +144,13 @@ List<SettingsModel> get extraSettings => [
   ),
 
   const SwitchModel(
+      title: '竖屏即刷',
+      leading: const Icon(Icons.height),
+      setKey: SettingBoxKey.portraitSlideVideo,
+      defaultVal: false,
+  ),
+
+  const SwitchModel(
     title: '显示视频分段信息',
     leading: Icon(CustomIcons.view_headline_rotate_90),
     setKey: SettingBoxKey.showViewPoints,

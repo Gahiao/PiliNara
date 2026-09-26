@@ -153,6 +153,15 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   final RxBool isNativePip = false.obs;
   bool isLive = false;
 
+  VoidCallback? onPortraitSlideUp;
+  VoidCallback? onPortraitSlideDown;
+
+  bool get enablePortraitSlideVideo =>
+      Pref.portraitSlideVideo &&
+          onPortraitSlideUp != null &&
+          isFullScreen.value &&
+          !isLive;
+
   bool _isVertical = false;
 
   final Rx<VideoFitType> videoFit = Rx(.contain);

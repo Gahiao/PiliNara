@@ -7,4 +7,5 @@ enum GestureType {
   horizontal,
   center_up,
   center_down,
+  portraitSlide,
 }
