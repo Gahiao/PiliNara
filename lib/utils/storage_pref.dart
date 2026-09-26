@@ -868,6 +868,9 @@ abstract final class Pref {
   static bool get removeOnlyFansVideoDyn =>
       _setting.get(SettingBoxKey.removeOnlyFansVideoDyn, defaultValue: false);
 
+  static bool get removeDynVideoDyn =>
+      _setting.get(SettingBoxKey.removeDynVideoDyn, defaultValue: false);
+
   static bool get antiGoodsReply =>
       _setting.get(SettingBoxKey.antiGoodsReply, defaultValue: false);
 
