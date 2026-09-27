@@ -2081,55 +2081,11 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
               ),
       ),
     );
-    // 归位动画中：透明占位参与布局（供量取目标矩形）但不可见不可点，
-    // 小窗是唯一可见端，恢复握手完成后亮出
-    final Widget playerWidget = _pipRestoreInFlight
-        ? IgnorePointer(child: Opacity(opacity: 0, child: player))
-        : player;
-    if (!_portraitSlideSupported) {
-      return playerWidget;
-    }
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        playerWidget,
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: MediaQuery.viewPaddingOf(context).bottom + 96,
-       child: IgnorePointer(
-            child: Obx(() {
-              final ctr = videoDetailController.plPlayerController;
-              final bool show =
-                  _portraitSlideMode &&
-                      isPortrait &&
-                      isFullScreen &&
-                      ctr.showControls.value &&
-                      !ctr.controlsLock.value;
-              return AnimatedOpacity(
-                opacity: show ? 1 : 0,
-                duration: const Duration(milliseconds: 200),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      FontAwesomeIcons.chevronUp,
-                      size: 12,
-                      color: Colors.white70,
-                    ),
-                    SizedBox(width: 6),
-                    Text(
-                      '上滑看下一个 · 下滑看上一个',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ),
-        ),
-      ],
-    );
+  // 归位动画中：透明占位参与布局（供量取目标矩形）但不可见不可点，
+  // 小窗是唯一可见端，恢复握手完成后亮出
+  return _pipRestoreInFlight
+      ? IgnorePointer(child: Opacity(opacity: 0, child: player))
+      : player;
   }
 
   late ThemeData theme;
