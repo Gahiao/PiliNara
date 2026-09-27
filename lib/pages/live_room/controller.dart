@@ -72,6 +72,7 @@ class LiveRoomController extends GetxController {
   final isLoaded = false.obs;
 
   final isUnstartedRoom = false.obs;
+  int? liveStatus;
   final roomInfoH5 = Rxn<RoomInfoH5Data>();
 
   final liveTime = Rxn<int>();
@@ -322,7 +323,7 @@ class LiveRoomController extends GetxController {
     );
     if (res case Success(:final response)) {
       if (response.liveStatus != 1) {
-        if (response.liveStatus == 0) {
+        if (response.liveStatus == 0 || response.liveStatus == 2) {
           _initUnstartedRoom(response);
         } else {
           _showDialog('当前直播间未开播');
@@ -366,10 +367,15 @@ class LiveRoomController extends GetxController {
     }
   }
 
+  // live_status == 2 是 B 站侧的「轮播中」（轮播 UP 的投稿），同样没有 playurl_info；
+  // 本应用不解析轮播视频，只拿它当未开播聊天室，仅在文案上区分。
+  bool get isRoundRoom => liveStatus == 2;
+
   void _initUnstartedRoom(RoomPlayInfoData response) {
     if (isUnstartedRoom.value) {
       return;
     }
+    liveStatus = response.liveStatus;
     isUnstartedRoom.value = true;
     ruid = response.uid;
     if (response.roomId case final roomId?) {

@@ -635,10 +635,26 @@ class _LiveRoomPageState extends State<LiveRoomPage>
               cacheWidth: width.cacheSize(context),
             ),
           const ColoredBox(color: Color(0x66000000)),
-          const Center(
-            child: Text(
-              '直播未开始',
-              style: TextStyle(fontSize: 15, color: baseWhite),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _liveRoomController.title.value,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 15, color: baseWhite),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _liveRoomController.isRoundRoom ? '直播未开始 轮播中' : '直播未开始',
+                    style: const TextStyle(fontSize: 13, color: baseWhite),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

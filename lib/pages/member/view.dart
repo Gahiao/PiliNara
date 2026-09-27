@@ -161,6 +161,7 @@ class _MemberPageState extends State<MemberPage> {
                             ),
                           ),
                         Expanded(child: _buildBody),
+                        _buildLiveEntryBar(theme, padding.bottom),
                       ],
                     ),
                   )
@@ -171,6 +172,46 @@ class _MemberPageState extends State<MemberPage> {
             onReload: _userController.onReload,
           ),
         },
+      ),
+    );
+  }
+
+  // 未开播房间的入口：主页其余地方只在开播时给出直播入口，没开播时进不去
+  Widget _buildLiveEntryBar(ColorScheme theme, double bottomPadding) {
+    final live = _userController.live;
+    if (live == null || live.roomStatus != 1 || live.liveStatus == 1) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: .only(top: 12, left: 12, right: 12, bottom: 12 + bottomPadding),
+      child: Material(
+        color: theme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => PageUtils.toLiveRoom(live.roomid),
+          child: Padding(
+            padding: const .symmetric(vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.live_tv,
+                  size: 20,
+                  color: theme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'TA现在并没有直播',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: theme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
