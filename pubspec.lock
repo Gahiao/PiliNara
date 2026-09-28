@@ -251,7 +251,7 @@ packages:
     description:
       path: "."
       ref: "feat/mask-region"
-      resolved-ref: "1fad3fb35c44031657867f9d0bb3214a2d7d052f"
+      resolved-ref: dd95b61aaea4a6e1ad56ce13e4188b9edf57160f
       url: "https://github.com/Starfallan/canvas_danmaku.git"
     source: git
     version: "0.2.6"
