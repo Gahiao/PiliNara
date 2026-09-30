@@ -331,6 +331,12 @@ abstract final class SettingBoxKey {
       appFont = 'appFont',
       customAppFont = 'customAppFont',
       customAppFontNames = 'customAppFontNames';
+  static const String bvJump = "bvJump";
+  static const String showBvToast = "showBvToast";
+  static const String jumpDirec = "jumpDirec";
+  static const String bvJumpToastText = "bvJumpToastText";
+  static const String shouldJumpEveryTime = "shouldJumpEveryTime";
+  static const String portraitSlideVideo = "portraitSlideVideo";
 }
 
 abstract final class LocalCacheKey {
@@ -349,7 +355,8 @@ abstract final class LocalCacheKey {
       remarkMids = 'remarkMids',
       cdnNodeList = 'cdnNodeList',
       cdnNodeListTime = 'cdnNodeListTime',
-      cdnNodeRegion = 'cdnNodeRegion';
+      cdnNodeRegion = 'cdnNodeRegion',
+      lastBvClipboard = "lastBvClipboard";
 }
 
 abstract final class VideoBoxKey {

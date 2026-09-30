@@ -126,7 +126,7 @@ class _AboutPageState extends State<AboutPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  '基于PiliPlus做了一些自用修改',
+                  '基于PiliNara做了一些自用修改 此为PiliNara的fork',
                   style: TextStyle(color: outline),
                   semanticsLabel: '与你一起，发现不一样的世界',
                 ),
@@ -177,6 +177,12 @@ Commit Hash: ${BuildConfig.commitHash}''',
             leading: const Icon(Icons.code),
             title: const Text('Source Code'),
             subtitle: Text(Constants.sourceCodeUrl, style: subTitleStyle),
+          ),
+          ListTile(
+            onTap: () => PageUtils.launchURL(Constants.basedOnUrl),
+            leading: const Icon(Icons.code),
+            title: const Text('Based On'),
+            subtitle: Text(Constants.basedOnUrl, style: subTitleStyle),
           ),
           ListTile(
             onTap: () => PageUtils.launchURL(Constants.upstreamCodeUrl),
