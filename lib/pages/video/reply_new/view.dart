@@ -42,6 +42,8 @@ class ReplyPage extends CommonRichTextPubPage {
   final String? hint;
   final bool canUploadPic;
 
+  final int? upMid;
+
   const ReplyPage({
     super.key,
     super.items,
@@ -54,6 +56,7 @@ class ReplyPage extends CommonRichTextPubPage {
     this.replyItem,
     this.hint,
     this.canUploadPic = true,
+    this.upMid,
   });
 
   @override
@@ -65,6 +68,9 @@ class _ReplyPageState extends CommonRichTextPubPageState<ReplyPage> {
   final heroTag = Get.arguments?['heroTag'];
 
   final RxBool _latexOn = false.obs;
+
+  @override
+  int? get mentionUpMid => widget.upMid;
 
   @override
   void dispose() {

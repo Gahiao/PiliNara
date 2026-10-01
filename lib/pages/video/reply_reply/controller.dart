@@ -176,6 +176,7 @@ class VideoReplyReplyController extends ReplyController
                 replyType: this.replyType,
                 replyItem: replyItem,
                 items: savedReplies[key],
+                upMid: upMid?.toInt(),
                 onSave: (reply) {
                   if (reply.isEmpty) {
                     savedReplies.remove(key);
