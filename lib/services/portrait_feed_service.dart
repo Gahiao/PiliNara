@@ -106,7 +106,7 @@ class PortraitFeedService {
           await _fillHomeRcmd();
         }
       } else {
-        await _fillRelated(currentBvid, bvid: '');
+        await _fillRelated(bvid: currentBvid);
       }
       return _queue.isNotEmpty;
     } finally {
@@ -182,7 +182,7 @@ class PortraitFeedService {
     if (Pref.portraitRC) {
       await _fillHomeRcmd();
     } else {
-      await _fillRelated(bvid, bvid: '');
+      await _fillRelated(bvid: bvid);
     }
   }
 
@@ -209,7 +209,7 @@ class PortraitFeedService {
     }
   }
 
-  Future<void> _fillRelated(String currentBvid, {required String bvid}) async {
+  Future<void> _fillRelated({required String bvid}) async {
     if (_filling) return;
     _filling = true;
     try {
