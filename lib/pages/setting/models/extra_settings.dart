@@ -28,6 +28,7 @@ import 'package:PiliPlus/pages/main/controller.dart';
 import 'package:PiliPlus/pages/setting/models/model.dart';
 import 'package:PiliPlus/pages/setting/pages/danmaku_merge_setting.dart';
 import 'package:PiliPlus/pages/setting/reply_setting.dart';
+import 'package:PiliPlus/pages/setting/widgets/portraitSlideDialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/select_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/slider_dialog.dart';
 import 'package:PiliPlus/pages/video/reply/widgets/reply_item_grpc.dart';
@@ -142,16 +143,16 @@ List<SettingsModel> get extraSettings => [
     ),
   ),
 
-  SplitModel(
-    normalModel: const NormalModel.split(
+  const SplitModel(
+    normalModel: NormalModel.split(
       title: '竖屏即刷',
       subtitle: '允许竖屏视频上下滑动刷视频',
-      leading: const Icon(Icons.height),
+      leading: Icon(Icons.height),
     ),
       switchModel: SwitchModel.split(
         setKey: SettingBoxKey.portraitSlideVideo,
         defaultVal: false,
-        onTap: portrait
+        onTap: portraitSlideDialog,
       ),
   ),
 
