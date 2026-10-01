@@ -3,6 +3,8 @@ import 'package:PiliPlus/http/search.dart';
 import 'package:PiliPlus/http/video.dart';
 import 'package:PiliPlus/models/model_hot_video_item.dart';
 import 'package:PiliPlus/models_new/video/video_detail/dimension.dart';
+import 'package:PiliPlus/models/model_rec_video_item.dart';
+import 'package:PiliPlus/utils/storage_pref.dart';
 
 class PortraitFeedItem {
   PortraitFeedItem({
@@ -30,13 +32,15 @@ class PortraitFeedService {
   static final PortraitFeedService instance = PortraitFeedService._();
 
   static const int _maxHistory = 50;
-  static const int _maxProbe = 10;
+  static const int _maxProbe = 30;
 
   final List<PortraitFeedItem> _queue = [];
   final List<PortraitFeedItem> _history = [];
 
   String? _cursor;
   bool _filling = false;
+  int _homeIdx = 0;
+  final Set<String> _rejected = <String>{};
 
   String? get cursor => _cursor;
 
@@ -133,9 +137,38 @@ class PortraitFeedService {
   }
 
   Future<void> _fill({required String bvid}) async {
-    if (_filling) {
-      return;
+    if (Pref.portraitRC) {
+      await _fillHomeRcmd();
+    } else {
+      await _fillRelated(bvid:bvid);
     }
+  }
+
+  Future<void> _fillHomeRcmd() async {
+    final res = await VideoHttp.rcmdVideoList(ps: 20, freshIdx: _homeIdx);
+    if (res case Success(:final response)) {
+      _homeIdx++;
+      for (final e in response) {
+        final String? bvid = e.bvid;
+        if (bvid == null || bvid.isEmpty) {
+          continue;
+        }
+        _queue.add(
+          PortraitFeedItem(
+            bvid: bvid,
+            cid: e.cid,
+            aid: e.aid,
+            cover: e.cover,
+            title: e.title,
+            dimension: e.dimension,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _fillRelated({required String bvid}) async {
+    if (_filling) return;
     _filling = true;
     try {
       final res = await VideoHttp.relatedVideoList(bvid: bvid);

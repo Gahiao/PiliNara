@@ -4,7 +4,6 @@ import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 
-const String kToastTextDefault = '~';
 
 Future<void> portraitSlideDialog(BuildContext context) async {
   var subtreeKey = UniqueKey();
@@ -34,6 +33,7 @@ Future<void> portraitSlideDialog(BuildContext context) async {
                       setKey: SettingBoxKey.portraitRC,
                       defaultVal: false,
                       contentPadding: EdgeInsets.symmetric(horizontal: 24),
+                      onChanged: (_) => setState(() {}),
                     ),
                   ],
                 ),
@@ -45,7 +45,7 @@ Future<void> portraitSlideDialog(BuildContext context) async {
         actions: [
           TextButton(
             onPressed: () async {
-
+              await GStorage.setting.put(SettingBoxKey.portraitRC, false);
 
               setState(() => subtreeKey = UniqueKey());
             },

@@ -1,10 +1,13 @@
 import 'package:PiliPlus/models/model_owner.dart';
 import 'package:PiliPlus/models/model_video.dart';
+import 'package:flutter_html/flutter_html.dart' hide Dimension;
+import 'package:PiliPlus/models_new/video/video_detail/dimension.dart';
 
 abstract class BaseRcmdVideoItemModel extends BaseVideoItemModel {
   String? goto;
   String? uri;
   String? rcmdReason;
+  Dimension? dimension;
 
   // app推荐专属
   int? param;
@@ -29,6 +32,8 @@ class RcmdVideoItemModel extends BaseRcmdVideoItemModel {
     //     ? RcmdReason.fromJson(json["rcmd_reason"])
     //     : RcmdReason(content: '');
     rcmdReason = json["rcmd_reason"]?['content'];
+    dimension = json['dimension'] == null? null
+        : Dimension.fromJson(json['dimension']);
   }
 
   // @override
