@@ -40,6 +40,9 @@ class PortraitFeedService {
   String? _cursor;
   bool _filling = false;
   int _homeIdx = 0;
+  bool _refreshing = false;
+  DateTime? _lastRefreshAt;
+  static const Duration _refreshCooldown = Duration(seconds: 5);
   final Set<String> _rejected = <String>{};
 
   String? get cursor => _cursor;
@@ -82,7 +85,39 @@ class PortraitFeedService {
     _cursor = null;
   }
 
+
+  Future<bool> _refreshFeed(String currentBvid) async {
+    if (_refreshing) return false;
+    final now = DateTime.now();
+    if (_lastRefreshAt != null &&
+        now.difference(_lastRefreshAt!) < _refreshCooldown) {
+      return false;
+    }
+    _refreshing = true;
+    _lastRefreshAt = now;
+    try {
+      _queue.clear();
+      if (Pref.portraitRC) {
+        _homeIdx += 2;
+        await _fillHomeRcmd();
+        if (_queue.isEmpty) {
+          _homeIdx = 0;
+          _rejected.clear();
+          await _fillHomeRcmd();
+        }
+      } else {
+        await _fillRelated(currentBvid, bvid: '');
+      }
+      return _queue.isNotEmpty;
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+
+
   Future<PortraitFeedItem?> next({required String currentBvid}) async {
+    bool refreshed = false;
     for (int i = 0; i < _maxProbe; i++) {
       var item = _take(currentBvid);
       if (item == null) {
@@ -90,7 +125,14 @@ class PortraitFeedService {
         item = _take(currentBvid);
       }
       if (item == null) {
-        return null;
+        if (Pref.portraitNewv) {
+          if (refreshed || !await _refreshFeed(currentBvid)) {
+            return null;
+          }
+          refreshed = true;
+          continue;
+        }
+          return null;
       }
       if (await _ensureVertical(item)) {
         return item;
@@ -140,7 +182,7 @@ class PortraitFeedService {
     if (Pref.portraitRC) {
       await _fillHomeRcmd();
     } else {
-      await _fillRelated(bvid:bvid);
+      await _fillRelated(bvid, bvid: '');
     }
   }
 
@@ -167,7 +209,7 @@ class PortraitFeedService {
     }
   }
 
-  Future<void> _fillRelated({required String bvid}) async {
+  Future<void> _fillRelated(String currentBvid, {required String bvid}) async {
     if (_filling) return;
     _filling = true;
     try {

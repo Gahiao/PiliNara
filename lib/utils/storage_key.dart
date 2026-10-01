@@ -337,7 +337,8 @@ abstract final class SettingBoxKey {
       bvJumpToastText = "bvJumpToastText",
       shouldJumpEveryTime = "shouldJumpEveryTime";
   static const String portraitSlideVideo = "portraitSlideVideo",
-      portraitRC = "portraitRC";
+      portraitRC = "portraitRC",
+      portraitNewv = "portraitNewv";
 }
 
 abstract final class LocalCacheKey {

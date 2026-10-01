@@ -1751,6 +1751,13 @@ abstract final class Pref {
   static set portraitRC(bool value) =>
       _setting.put(SettingBoxKey.portraitRC, value);
 
+  static bool get portraitNewv =>
+      _setting.get(SettingBoxKey.portraitNewv,
+          defaultValue:false);
+
+  static set portraitNewv(bool value) =>
+      _setting.put(SettingBoxKey.portraitNewv, value);
+
 
   static String get bvJumpToastText =>
       _setting.get(SettingBoxKey.bvJumpToastText,
