@@ -98,17 +98,11 @@ class PortraitFeedService {
     try {
       _queue.clear();
       if (Pref.portraitRC) {
-        _homeIdx += 2;
         await _fillHomeRcmd();
-        if (_queue.isEmpty) {
-          _homeIdx = 0;
-          _rejected.clear();
-          await _fillHomeRcmd();
-        }
       } else {
         await _fillRelated(bvid: currentBvid);
       }
-      return _queue.isNotEmpty;
+      return true;
     } finally {
       _refreshing = false;
     }
