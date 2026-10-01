@@ -129,8 +129,8 @@ List<SettingsModel> get extraSettings => [
     ),
   ),
 
-  SplitModel(
-    normalModel: const NormalModel.split(
+  const SplitModel(
+    normalModel: NormalModel.split(
       title: "BV跳转",
       subtitle: "检测剪切板中的BV号并自动跳转",
       leading: Icon(MdiIcons.motionPlayOutline),
@@ -138,16 +138,21 @@ List<SettingsModel> get extraSettings => [
     switchModel: SwitchModel.split(
       setKey: SettingBoxKey.bvJump,
       defaultVal: false,
-      onTap: (context) =>
-        showBvSwitchDialog(context),
+      onTap: showBvSwitchDialog,
     ),
   ),
 
-  const SwitchModel(
+  SplitModel(
+    normalModel: const NormalModel.split(
       title: '竖屏即刷',
+      subtitle: '允许竖屏视频上下滑动刷视频',
       leading: const Icon(Icons.height),
-      setKey: SettingBoxKey.portraitSlideVideo,
-      defaultVal: false,
+    ),
+      switchModel: SwitchModel.split(
+        setKey: SettingBoxKey.portraitSlideVideo,
+        defaultVal: false,
+        onTap: portrait
+      ),
   ),
 
   const SwitchModel(
