@@ -2,8 +2,8 @@ import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/search.dart';
 import 'package:PiliPlus/http/video.dart';
 import 'package:PiliPlus/models/model_hot_video_item.dart';
-import 'package:PiliPlus/models_new/video/video_detail/dimension.dart';
 import 'package:PiliPlus/models/model_rec_video_item.dart';
+import 'package:PiliPlus/models_new/video/video_detail/dimension.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 
 class PortraitFeedItem {
@@ -95,6 +95,9 @@ class PortraitFeedService {
       if (await _ensureVertical(item)) {
         return item;
       }
+      if (item.dimension != null) {
+        _rejected.add(item.bvid);
+      }
     }
     return null;
   }
@@ -102,12 +105,9 @@ class PortraitFeedService {
   PortraitFeedItem? _take(String currentBvid) {
     while (_queue.isNotEmpty) {
       final item = _queue.removeAt(0);
-      if (item.bvid == currentBvid) {
-        continue;
-      }
-      if (_history.any((e) => e.bvid == item.bvid)) {
-        continue;
-      }
+      if (item.bvid == currentBvid) continue;
+      if (_history.any((e) => e.bvid == item.bvid)) continue;
+      if (_rejected.contains(item.bvid)) continue;
       return item;
     }
     return null;
