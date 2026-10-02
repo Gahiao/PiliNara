@@ -29,7 +29,7 @@ Future<void> portraitSlideDialog(BuildContext context) async {
                   children: [
                     SetSwitchItem(
                       title: '推荐来源使用首页推荐',
-                      subtitle: '点击切换 当前推荐来源: ' + (Pref.portraitRC ? '首页推荐(这可能极大减少能刷到的视频)' : '相关推荐                   '),
+                      subtitle: '点击切换 当前推荐来源: ' + (Pref.portraitRC ? '首页推荐(这可能极大减少能刷到的视频)' : '相关推荐                        '),
                       setKey: SettingBoxKey.portraitRC,
                       defaultVal: false,
                       contentPadding: EdgeInsets.symmetric(horizontal: 24),

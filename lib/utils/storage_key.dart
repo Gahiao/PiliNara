@@ -331,14 +331,14 @@ abstract final class SettingBoxKey {
       appFont = 'appFont',
       customAppFont = 'customAppFont',
       customAppFontNames = 'customAppFontNames';
-  static const String bvJump = "bvJump",
-      showBvToast = "showBvToast",
-      jumpDirec = "jumpDirec",
-      bvJumpToastText = "bvJumpToastText",
-      shouldJumpEveryTime = "shouldJumpEveryTime";
-  static const String portraitSlideVideo = "portraitSlideVideo",
-      portraitRC = "portraitRC",
-      portraitNewv = "portraitNewv";
+  static const String bvJump = 'bvJump',
+      showBvToast = 'showBvToast',
+      jumpDirec = 'jumpDirec',
+      bvJumpToastText = 'bvJumpToastText',
+      shouldJumpEveryTime = 'shouldJumpEveryTime';
+  static const String portraitSlideVideo = 'portraitSlideVideo',
+      portraitRC = 'portraitRC',
+      portraitNewv = 'portraitNewv';
 }
 
 abstract final class LocalCacheKey {
