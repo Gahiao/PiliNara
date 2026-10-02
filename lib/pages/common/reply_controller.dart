@@ -157,6 +157,7 @@ abstract class ReplyController<R> extends CommonListController<R, ReplyInfo> {
                 replyType: replyItem?.type.toInt() ?? replyType!,
                 replyItem: replyItem,
                 items: savedReplies[key],
+                upMid: upMid?.toInt(),
 
                 /// hd api deprecated
                 // canUploadPic: canUploadPic,

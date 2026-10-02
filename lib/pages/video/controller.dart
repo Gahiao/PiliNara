@@ -1837,21 +1837,33 @@ class VideoDetailController extends GetxController
   int? _dmElemsCid;
   Future<List<DanmakuElem>?>? _dmElemsFuture;
 
-  /// 拉取当前分P的全量弹幕；同一分P内复用结果，避免与高能进度条重复请求
+  /// 拉取当前分P的全量弹幕；同一分P内进行中的请求与成功结果共享，
+  /// 避免弹幕数（[_getDmCount]）与高能进度条（[_tryBuildLocalDmTrend]）各发一次请求
   Future<List<DanmakuElem>?> _fetchAllDanmaku() {
+    final cid = this.cid.value;
     final cached = _dmElemsFuture;
-    if (_dmElemsCid == cid.value && cached != null) {
+    if (_dmElemsCid == cid && cached != null) {
       return cached;
     }
     final taskId = ++_dmFetchTaskId;
     bool shouldCancel() => taskId != _dmFetchTaskId || isClosed;
     final durationMs =
         data.timeLength ?? plPlayerController.durationInMilliseconds;
-    return _dmElemsFuture = DanmakuDensityTrend.fetchAll(
-      cid: cid.value,
+    final future = DanmakuDensityTrend.fetchAll(
+      cid: cid,
       durationMs: durationMs,
       shouldCancel: shouldCancel,
-    );
+    ).then((elems) {
+      // 失败不留缓存，同一分P内下次触发可重试；被更新的任务顶掉时不动缓存
+      if (elems == null && taskId == _dmFetchTaskId) {
+        _dmElemsCid = null;
+        _dmElemsFuture = null;
+      }
+      return elems;
+    });
+    _dmElemsCid = cid;
+    _dmElemsFuture = future;
+    return future;
   }
 
   Future<void> _getDmCount() async {
