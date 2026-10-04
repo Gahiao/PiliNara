@@ -82,6 +82,18 @@ class _DownloadPanelState extends State<DownloadPanel> {
     );
   }
 
+  /// 该条目在 `episodes`（ugcSeason 各 section 拉平）中的位置，即合集里的原顺序。
+  /// 只有合集成员才记序号：成员是 ugc.EpisodeItem；「有 ugcSeason 但 sections
+  /// 为空、episodes 退化成单视频分P列表」时拿到的是 Part，此时返回 null。
+  int? _seasonIndex(ugc.BaseEpisodeItem episode, ugc.EpisodeItem? parent) {
+    final item = parent ?? episode;
+    if (item is! ugc.EpisodeItem) {
+      return null;
+    }
+    final index = widget.episodes.indexOf(item);
+    return index < 0 ? null : index;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -300,6 +312,7 @@ class _DownloadPanelState extends State<DownloadPanel> {
 
     try {
       final autoFolderInfo = _autoFolderInfo;
+      final autoFolderIndex = _seasonIndex(episode, parent);
       switch (episode) {
         case Part part:
           _downloadService.downloadVideo(
@@ -309,6 +322,7 @@ class _DownloadPanelState extends State<DownloadPanel> {
             _quality,
             autoFolderTitle: autoFolderInfo?.title,
             autoFolderSourceKey: autoFolderInfo?.sourceKey,
+            autoFolderIndex: autoFolderIndex,
           );
           break;
         case ugc.EpisodeItem episode:
@@ -319,6 +333,7 @@ class _DownloadPanelState extends State<DownloadPanel> {
             _quality,
             autoFolderTitle: autoFolderInfo?.title,
             autoFolderSourceKey: autoFolderInfo?.sourceKey,
+            autoFolderIndex: autoFolderIndex,
           );
           break;
         case pgc.EpisodeItem episode:
