@@ -26,6 +26,7 @@
 
 
 <br/>
+Fork自[PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) 仅为自用
 
 ## 适配平台
 
