@@ -1047,4 +1047,43 @@ abstract final class Pref {
 
   static bool get enableEmoteTooltip =>
       _setting.get(SettingBoxKey.enableEmoteTooltip, defaultValue: false);
+
+  static bool get bvJump =>
+      _setting.get(SettingBoxKey.bvJump, defaultValue: false);
+
+  static set bvJump(bool value) => _setting.put(SettingBoxKey.bvJump, value);
+
+  static bool get shouldJumpEveryTime =>
+      _setting.get(SettingBoxKey.shouldJumpEveryTime, defaultValue: false);
+
+  static set shouldJumpEveryTime(bool value) =>
+      _setting.put(SettingBoxKey.shouldJumpEveryTime, value);
+
+  static bool get showBvToast =>
+      _setting.get(SettingBoxKey.showBvToast, defaultValue: false);
+
+  static set showBvToast(bool value) =>
+      _setting.put(SettingBoxKey.showBvToast, value);
+
+  static bool get jumpDirec =>
+      _setting.get(SettingBoxKey.jumpDirec, defaultValue: false);
+
+  static set jumpDirec(bool value) => _setting.put(SettingBoxKey.jumpDirec, value);
+
+  static String get bvJumpToastText =>
+      _setting.get(SettingBoxKey.bvJumpToastText, defaultValue: '已到达对应坐标~');
+
+  static set bvJumpToastText(String value) =>
+      _setting.put(SettingBoxKey.bvJumpToastText, value);
+
+  static String? get lastBvClipboard =>
+      _localCache.get(LocalCacheKey.lastBvClipboard);
+
+  static set lastBvClipboard(String? value) {
+    if (value == null) {
+      _localCache.delete(LocalCacheKey.lastBvClipboard);
+    } else {
+      _localCache.put(LocalCacheKey.lastBvClipboard, value);
+    }
+  }
 }

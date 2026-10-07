@@ -241,6 +241,11 @@ abstract final class SettingBoxKey {
       liveCdnUrl = 'liveCdnUrl',
       saveReply = 'saveReply',
       appFont = 'appFont';
+  static const String bvJump = 'bvJump',
+      showBvToast = 'showBvToast',
+      jumpDirec = 'jumpDirec',
+      bvJumpToastText = 'bvJumpToastText',
+      shouldJumpEveryTime = 'shouldJumpEveryTime';
 }
 
 abstract final class LocalCacheKey {
@@ -249,7 +254,8 @@ abstract final class LocalCacheKey {
       danmakuFilterRules = 'danmakuFilterRules',
       mixinKey = 'mixinKey',
       timeStamp = 'timeStamp',
-      buvid = 'buvid';
+      buvid = 'buvid',
+      lastBvClipboard = "lastBvClipboard";
 }
 
 abstract final class VideoBoxKey {

@@ -26,7 +26,7 @@ import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
 class MainController extends GetxController
-    with GetSingleTickerProviderStateMixin, AccountMixin {
+    with GetSingleTickerProviderStateMixin, AccountMixin, WidgetsBindingObserver {
   @override
   final AccountService accountService = Get.find<AccountService>();
 
@@ -75,6 +75,8 @@ class MainController extends GetxController
   @override
   void onInit() {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
+    ClipboardBv.check(Pref.shouldJumpEveryTime);
     if (Pref.autoUpdate) {
       Update.checkUpdate();
     }
@@ -350,9 +352,17 @@ class MainController extends GetxController
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      Future.delayed(const Duration(milliseconds: 500), ClipboardBv.check);
+    }
+  }
+
+  @override
   void onClose() {
     barOffset?.close();
     controller.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.onClose();
   }
 
