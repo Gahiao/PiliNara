@@ -117,7 +117,7 @@ List<SettingsModel> get extraSettings => [
       onTap: _showDynDialog,
     ),
   ),
-  SplitModel(
+  const SplitModel(
     normalModel: NormalModel.split(
       title: "BV跳转",
       subtitle: "检测剪切板中的BV号并自动跳转",
