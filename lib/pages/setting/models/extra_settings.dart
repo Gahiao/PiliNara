@@ -115,6 +115,18 @@ List<SettingsModel> get extraSettings => [
       onTap: _showDynDialog,
     ),
   ),
+  const SplitModel(
+    normalModel: NormalModel.split(
+      title: "BV跳转",
+      subtitle: "检测剪切板中的BV号并自动跳转",
+      leading: Icon(MdiIcons.motionPlayOutline),
+    ),
+    switchModel: SwitchModel.split(
+      setKey: SettingBoxKey.bvJump,
+      defaultVal: false,
+      onTap: showBvSwitchDialog,
+    ),
+  ),
   const SwitchModel(
     title: '显示视频分段信息',
     leading: Icon(CustomIcons.view_headline_rotate_90),
