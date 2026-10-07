@@ -26,6 +26,7 @@ import 'package:PiliPlus/pages/common/slide/common_slide_page.dart';
 import 'package:PiliPlus/pages/home/controller.dart';
 import 'package:PiliPlus/pages/main/controller.dart';
 import 'package:PiliPlus/pages/setting/models/model.dart';
+import 'package:PiliPlus/pages/setting/widgets/bv_jump_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/select_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/slider_dialog.dart';
 import 'package:PiliPlus/pages/video/reply/widgets/reply_item_grpc.dart';
@@ -116,7 +117,7 @@ List<SettingsModel> get extraSettings => [
       onTap: _showDynDialog,
     ),
   ),
-  const SplitModel(
+  SplitModel(
     normalModel: NormalModel.split(
       title: "BV跳转",
       subtitle: "检测剪切板中的BV号并自动跳转",
