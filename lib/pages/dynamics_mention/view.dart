@@ -23,20 +23,18 @@ class DynMentionPanel extends StatefulWidget {
     super.key,
     this.scrollController,
     this.onCachePos,
-    this.upMid,
+    this.top,
   });
 
   final ScrollController? scrollController;
   final ValueChanged<double>? onCachePos;
-
-  /// 置顶项的 mid，不在返回里则不置顶
-  final int? upMid;
+  final MentionItem? top;
 
   static Future<Object? /* ListOr<MentionItem> */> onDynMention(
     BuildContext context, {
     double offset = 0,
     ValueChanged<double>? onCachePos,
-    int? upMid,
+    MentionItem? top,
   }) {
     return showModalBottomSheet(
       context: Get.context!,
@@ -56,7 +54,7 @@ class DynMentionPanel extends StatefulWidget {
         builder: (context, scrollController) => DynMentionPanel(
           scrollController: scrollController,
           onCachePos: onCachePos,
-          upMid: upMid,
+          top: top,
         ),
       ),
     );
@@ -239,76 +237,58 @@ class _DynMentionPanelState
       ),
       Success<List<MentionGroup>?>(:final response) =>
         response != null && response.isNotEmpty
-            ? _buildGroups(theme, response)
+            ? SliverMainAxisGroup(
+                slivers: [
+                  if (_controller.controller.text.isEmpty)
+                    if (widget.top case final top?)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const .only(top: 5),
+                          child: DynMentionItem(
+                            item: top,
+                            onTap: () => Get.back(result: top),
+                          ),
+                        ),
+                      ),
+                  ...response.map((group) {
+                    if (group.items.isNullOrEmpty) {
+                      return const SliverToBoxAdapter();
+                    }
+                    return SliverMainAxisGroup(
+                      slivers: [
+                        SliverPinnedHeader(
+                          backgroundColor:
+                              theme.bottomSheetTheme.backgroundColor,
+                          child: Padding(
+                            padding: const .symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            child: Text(group.groupName!),
+                          ),
+                        ),
+                        SliverList.builder(
+                          itemCount: group.items!.length,
+                          itemBuilder: (context, index) {
+                            final item = group.items![index];
+                            return DynMentionItem(
+                              item: item,
+                              onTap: () => Get.back(result: item),
+                              onCheck: (value) =>
+                                  _controller.onCheck(value, item),
+                            );
+                          },
+                        ),
+                      ],
+                    );
+                  }),
+                ],
+              )
             : HttpError(onReload: _controller.onReload),
       Error(:final errMsg) => HttpError(
         errMsg: errMsg,
         onReload: _controller.onReload,
       ),
     };
-  }
-
-  Widget _buildGroups(ThemeData theme, List<MentionGroup> groups) {
-    // 置顶项从原分组摘掉：多选状态存在 item 上，渲染两遍会两边各自勾选
-    final pinned = _pinnedItem(groups);
-    return SliverMainAxisGroup(
-      slivers: [
-        if (pinned != null) _buildGroup(theme, '当前UP主', [pinned]),
-        ...groups.map((group) {
-          final items = group.items;
-          if (items.isNullOrEmpty) {
-            return const SliverToBoxAdapter();
-          }
-          final rest = <MentionItem>[
-            for (final item in items!)
-              if (pinned == null || item.uid != pinned.uid) item,
-          ];
-          return rest.isEmpty
-              ? const SliverToBoxAdapter()
-              : _buildGroup(theme, group.groupName!, rest);
-        }),
-      ],
-    );
-  }
-
-  Widget _buildGroup(ThemeData theme, String name, List<MentionItem> items) {
-    return SliverMainAxisGroup(
-      slivers: [
-        SliverPinnedHeader(
-          backgroundColor: theme.bottomSheetTheme.backgroundColor,
-          child: Padding(
-            padding: const .symmetric(horizontal: 16, vertical: 10),
-            child: Text(name),
-          ),
-        ),
-        SliverList.builder(
-          itemCount: items.length,
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return DynMentionItem(
-              item: item,
-              onTap: () => Get.back(result: item),
-              onCheck: (value) => _controller.onCheck(value, item),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  MentionItem? _pinnedItem(List<MentionGroup> groups) {
-    final upMid = widget.upMid;
-    if (upMid == null || upMid <= 0) {
-      return null;
-    }
-    final uid = upMid.toString();
-    for (final group in groups) {
-      for (final item in group.items ?? const <MentionItem>[]) {
-        if (item.uid == uid) {
-          return item;
-        }
-      }
-    }
-    return null;
   }
 }
