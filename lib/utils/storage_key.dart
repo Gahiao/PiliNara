@@ -345,7 +345,6 @@ abstract final class LocalCacheKey {
       recommendBlockedMids = 'recommendBlockedMids',
       replyBlockedMids = 'replyBlockedMids',
       danmakuFilterRules = 'danmakuFilterRules',
-      downloadCollections = 'downloadCollections',
       lastLocalPlayed = 'lastLocalPlayed',
       mixinKey = 'mixinKey',
       timeStamp = 'timeStamp',

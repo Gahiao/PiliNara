@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/badge.dart';
-import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/progress_bar/video_progress_indicator.dart';
@@ -13,9 +12,10 @@ import 'package:PiliPlus/models/common/sponsor_block/segment_type.dart';
 import 'package:PiliPlus/models/common/video/video_type.dart';
 import 'package:PiliPlus/models/common/video/video_quality.dart';
 import 'package:PiliPlus/models_new/download/bili_download_entry_info.dart';
-import 'package:PiliPlus/models_new/download/download_collection.dart';
+import 'package:PiliPlus/models_new/download/download_playback.dart';
 import 'package:PiliPlus/pages/common/multi_select/base.dart';
 import 'package:PiliPlus/pages/download/downloading/view.dart';
+import 'package:PiliPlus/pages/download/utils/cache_delete_confirm.dart';
 import 'package:PiliPlus/pages/download/utils/open_download_entry.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/duration_utils.dart';
@@ -37,15 +37,11 @@ class DetailItem extends StatelessWidget {
     this.progress,
     required this.downloadService,
     this.onDelete,
-    this.onDeleteRequested,
     required this.showTitle,
     this.isCurr = false,
     this.playContext,
     this.onPlayReturned,
-    this.deleteLabel = '删除',
-    this.deleteConfirmText,
     this.customOnLongPress,
-    this.extraMoreItemsBuilder,
     this.enableTap = true,
     this.showMoreButton = true,
     //
@@ -58,16 +54,11 @@ class DetailItem extends StatelessWidget {
   final ChangeNotifier? progress;
   final DownloadService downloadService;
   final VoidCallback? onDelete;
-  final Future<void> Function(BuildContext context)? onDeleteRequested;
   final bool showTitle;
   final bool isCurr;
   final DownloadVideoPlayContext? playContext;
   final Future<void> Function()? onPlayReturned;
-  final String deleteLabel;
-  final String? deleteConfirmText;
   final VoidCallback? customOnLongPress;
-  final List<PopupMenuEntry<void>> Function(BuildContext context)?
-  extraMoreItemsBuilder;
   final bool enableTap;
   final bool showMoreButton;
   //
@@ -101,7 +92,7 @@ class DetailItem extends StatelessWidget {
     final theme = Theme.of(context);
     final outline = theme.colorScheme.outline;
     final cid = entry.source?.cid ?? entry.pageData?.cid;
-    final canDel = onDelete != null || onDeleteRequested != null;
+    final canDel = entry.isCompleted;
     final enableMultiSelect = controller.enableMultiSelect.value;
     void onLongPress() {
       if (enableMultiSelect) {
@@ -462,7 +453,7 @@ class DetailItem extends StatelessWidget {
   }
 
   Widget _buildMoreBtn(BuildContext context, ThemeData theme) {
-    final canDel = onDelete != null || onDeleteRequested != null;
+    final canDel = entry.isCompleted;
     return SizedBox(
       width: 29,
       height: 29,
@@ -570,25 +561,26 @@ class DetailItem extends StatelessWidget {
                       }
                     },
                   ),
-                ...?extraMoreItemsBuilder?.call(menuContext),
                 if (canDel) const PopupMenuDivider(height: 8),
                 if (canDel)
                   CustomPopupMenuItem<void>(
                     height: 38,
-                    child: Text(
-                      deleteLabel,
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    onTap: () {
-                      if (onDeleteRequested != null) {
-                        onDeleteRequested!(menuContext);
+                    child: const Text('删除', style: TextStyle(fontSize: 13)),
+                    onTap: () async {
+                      if (!await showDeleteConfirm(
+                        context: menuContext,
+                        entries: [entry],
+                      )) {
                         return;
                       }
-                      showConfirmDialog(
-                        context: menuContext,
-                        title: Text(deleteConfirmText ?? '确定删除该视频？'),
-                        onConfirm: onDelete,
-                      );
+                      if (onDelete case final onDelete?) {
+                        onDelete();
+                      } else {
+                        await deleteLocalEntries(
+                          downloadService: downloadService,
+                          entries: [entry],
+                        );
+                      }
                     },
                   ),
                 if (canDel)
@@ -600,6 +592,24 @@ class DetailItem extends StatelessWidget {
                         entry: entry,
                         isUpdate: true,
                       );
+                      SmartDialog.showToast(res ? '更新成功' : '更新失败');
+                    },
+                  ),
+                if (canDel && entry.segments != null)
+                  CustomPopupMenuItem<void>(
+                    height: 38,
+                    child: const Text('空降片段', style: TextStyle(fontSize: 13)),
+                    onTap: () => showSegmentsDetail(menuContext),
+                  ),
+                if (canDel)
+                  CustomPopupMenuItem<void>(
+                    height: 38,
+                    child: const Text(
+                      '更新空降片段',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    onTap: () async {
+                      final res = await downloadService.updateSegments(entry);
                       SmartDialog.showToast(res ? '更新成功' : '更新失败');
                     },
                   ),
