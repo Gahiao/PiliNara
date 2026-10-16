@@ -7,6 +7,7 @@ import 'package:PiliPlus/models_new/download/download_info.dart';
 import 'package:PiliPlus/pages/common/multi_select/base.dart';
 import 'package:PiliPlus/pages/download/detail/view.dart';
 import 'package:PiliPlus/pages/download/utils/cache_delete_confirm.dart';
+import 'package:PiliPlus/pages/download/utils/card_menu.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/bili_utils.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
@@ -167,7 +168,14 @@ class PageInfoItem<T extends MultiSelectData> extends StatelessWidget {
                             color: colorScheme.outline,
                           ),
                         ),
-                        pageInfo.entries.first.moreBtn(colorScheme),
+                        pageInfo.entries.first.moreBtn(
+                          colorScheme,
+                          extraItemsBuilder: (menuContext) =>
+                              buildGroupCardMenuItems(
+                                context: menuContext,
+                                entries: pageInfo.entries,
+                              ),
+                        ),
                       ],
                     ),
                   ],

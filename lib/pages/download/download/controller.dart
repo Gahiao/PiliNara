@@ -1,7 +1,9 @@
+import 'package:PiliPlus/models_new/download/download_folder.dart';
 import 'package:PiliPlus/models_new/download/download_info.dart';
 import 'package:PiliPlus/pages/common/multi_select/base.dart'
     show BaseMultiSelectMixin;
 import 'package:PiliPlus/pages/download/utils/cache_delete_confirm.dart';
+import 'package:PiliPlus/services/download/download_folder_service.dart';
 import 'package:PiliPlus/services/download/download_library_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:get/get.dart';
@@ -14,8 +16,11 @@ class DownloadController extends GetxController
     with BaseMultiSelectMixin<DownloadSeasonInfo> {
   final downloadService = Get.find<DownloadService>();
   final libraryService = Get.find<DownloadLibraryService>();
+  final folderService = Get.find<DownloadFolderService>();
 
   RxList<DownloadSeasonInfo> get seasons => libraryService.seasons;
+
+  RxList<DownloadFolder> get folders => folderService.folders;
 
   @override
   List<DownloadSeasonInfo> get list => seasons;

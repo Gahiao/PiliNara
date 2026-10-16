@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:PiliPlus/common/widgets/appbar/appbar.dart';
 import 'package:PiliPlus/common/widgets/flutter/pop_scope.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
@@ -10,6 +12,8 @@ import 'package:PiliPlus/pages/common/multi_select/base.dart'
 import 'package:PiliPlus/pages/download/detail/widgets/item.dart';
 import 'package:PiliPlus/pages/download/download_action_mixin.dart';
 import 'package:PiliPlus/pages/download/utils/cache_delete_confirm.dart';
+import 'package:PiliPlus/pages/download/utils/cache_export.dart';
+import 'package:PiliPlus/pages/download/utils/card_menu.dart';
 import 'package:PiliPlus/services/download/download_library_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/grid.dart';
@@ -92,6 +96,12 @@ class _DownloadDetailPageState extends State<DownloadDetailPage>
     _downloadItems.value = entries.toList()..sort(downloadEntrySort);
   }
 
+  Future<void> _exportSelected() async {
+    final entries = allChecked.toList();
+    handleSelect();
+    await exportDownloadEntries(entries);
+  }
+
   @override
   void onRemove() {
     confirmDeleteEntries(
@@ -121,7 +131,17 @@ class _DownloadDetailPageState extends State<DownloadDetailPage>
           appBar: MultiSelectAppBarWidget(
             ctr: this,
             visible: enableMultiSelect,
-            actions: [updateBtn()],
+            actions: [
+              updateBtn(),
+              if (Platform.isAndroid)
+                TextButton(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: checkedCount == 0 ? null : _exportSelected,
+                  child: const Text('导出'),
+                ),
+            ],
             child: AppBar(
               title: Text(widget.title),
               actions: [
@@ -162,6 +182,11 @@ class _DownloadDetailPageState extends State<DownloadDetailPage>
                             downloadService: downloadService,
                             entries: [entry],
                           ),
+                          extraMoreItemsBuilder: (menuContext) =>
+                              buildAddToFolderMenuItems(
+                                context: menuContext,
+                                entries: [entry],
+                              ),
                         );
                       },
                       itemCount: _downloadItems.length,

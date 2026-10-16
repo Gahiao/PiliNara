@@ -1,9 +1,10 @@
 import 'package:PiliPlus/models_new/download/bili_download_entry_info.dart';
 
-/// 离线缓存的播放范围：全部缓存，或某一个合集（含 PGC 一季）。
+/// 离线缓存的播放范围：全部缓存、一个合集（含 PGC 一季）、或一个手动文件夹。
 enum DownloadPlaylistScope {
   all,
   season,
+  folder,
 }
 
 /// 打开缓存视频时携带的播放上下文，决定本地视频页里「上一集/下一集」的范围。
@@ -13,12 +14,16 @@ enum DownloadPlaylistScope {
 class DownloadVideoPlayContext {
   final DownloadPlaylistScope scope;
 
-  /// 合集标识，取 [DownloadSeasonInfo.playlistKey]。
+  /// 合集标识，取 `DownloadSeasonInfo.playlistKey`。
   final String? seasonKey;
+
+  /// 手动文件夹标识，取 `DownloadFolder.id`。
+  final String? folderId;
 
   const DownloadVideoPlayContext._({
     required this.scope,
     this.seasonKey,
+    this.folderId,
   });
 
   const DownloadVideoPlayContext.all()
@@ -30,20 +35,33 @@ class DownloadVideoPlayContext {
         seasonKey: key,
       );
 
+  const DownloadVideoPlayContext.folder(String id)
+    : this._(
+        scope: DownloadPlaylistScope.folder,
+        folderId: id,
+      );
+
   bool get isSeason =>
       scope == DownloadPlaylistScope.season &&
       seasonKey != null &&
       seasonKey!.isNotEmpty;
 
+  bool get isFolder =>
+      scope == DownloadPlaylistScope.folder &&
+      folderId != null &&
+      folderId!.isNotEmpty;
+
   Map<String, dynamic> toArguments() => <String, dynamic>{
     'downloadPlaylistScope': scope.name,
     'downloadSeasonKey': ?seasonKey,
+    'downloadFolderId': ?folderId,
   };
 
   static DownloadVideoPlayContext? fromArguments(Map args) {
     final scope = switch (args['downloadPlaylistScope']) {
       'all' => DownloadPlaylistScope.all,
       'season' => DownloadPlaylistScope.season,
+      'folder' => DownloadPlaylistScope.folder,
       _ => null,
     };
     if (scope == null) {
@@ -52,10 +70,14 @@ class DownloadVideoPlayContext {
     if (scope == DownloadPlaylistScope.all) {
       return const DownloadVideoPlayContext.all();
     }
-    final seasonKey = args['downloadSeasonKey'];
-    return seasonKey is String && seasonKey.isNotEmpty
-        ? DownloadVideoPlayContext.season(seasonKey)
-        : null;
+    final isSeason = scope == DownloadPlaylistScope.season;
+    final key = isSeason ? args['downloadSeasonKey'] : args['downloadFolderId'];
+    if (key is! String || key.isEmpty) {
+      return null;
+    }
+    return isSeason
+        ? DownloadVideoPlayContext.season(key)
+        : DownloadVideoPlayContext.folder(key);
   }
 }
 
@@ -65,12 +87,14 @@ class DownloadContinueRecord {
   final int updatedAt;
   final DownloadPlaylistScope scope;
   final String? seasonKey;
+  final String? folderId;
 
   const DownloadContinueRecord({
     required this.cid,
     required this.updatedAt,
     required this.scope,
     this.seasonKey,
+    this.folderId,
   });
 
   static DownloadContinueRecord? fromJson(Object? raw) {
@@ -87,14 +111,21 @@ class DownloadContinueRecord {
     final scope = switch (json['scope']) {
       'all' => DownloadPlaylistScope.all,
       'season' => DownloadPlaylistScope.season,
+      'folder' => DownloadPlaylistScope.folder,
       _ => null,
     };
     if (cid == null || updatedAt is! int || scope == null) {
       return null;
     }
     final seasonKey = json['seasonKey'];
+    final folderId = json['folderId'];
+    // 范围键缺失的记录视为无效并清理，避免落到语义错误的范围上。
     if (scope == DownloadPlaylistScope.season &&
         (seasonKey is! String || seasonKey.isEmpty)) {
+      return null;
+    }
+    if (scope == DownloadPlaylistScope.folder &&
+        (folderId is! String || folderId.isEmpty)) {
       return null;
     }
     return DownloadContinueRecord(
@@ -102,6 +133,7 @@ class DownloadContinueRecord {
       updatedAt: updatedAt,
       scope: scope,
       seasonKey: seasonKey is String ? seasonKey : null,
+      folderId: folderId is String ? folderId : null,
     );
   }
 
@@ -110,6 +142,7 @@ class DownloadContinueRecord {
     'updatedAt': updatedAt,
     'scope': scope.name,
     'seasonKey': ?seasonKey,
+    'folderId': ?folderId,
   };
 }
 

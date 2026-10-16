@@ -1,5 +1,8 @@
+import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/models_new/download/bili_download_entry_info.dart';
+import 'package:PiliPlus/models_new/download/download_folder.dart';
 import 'package:PiliPlus/models_new/download/download_info.dart';
+import 'package:PiliPlus/services/download/download_folder_service.dart';
 import 'package:PiliPlus/services/download/download_library_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
@@ -167,6 +170,71 @@ Future<bool> confirmDeletePages({
   SmartDialog.showLoading();
   await deletePages(downloadService: downloadService, pages: pageList);
   SmartDialog.dismiss();
+  return true;
+}
+
+/// 把条目移出给定文件夹，只断开关联，不动缓存文件。
+Future<void> removeFromFolders({
+  required String folderId,
+  required Iterable<BiliDownloadEntryInfo> entries,
+}) async {
+  final list = _uniqueEntries(entries);
+  if (list.isEmpty) {
+    return;
+  }
+  await Get.find<DownloadFolderService>().removeVideosFromFolders(
+    list.map((entry) => entry.cid),
+    [folderId],
+  );
+}
+
+/// 确认后把条目移出当前文件夹。
+///
+/// 与删除缓存分属两件事：这里只解开关联，因此不报体积、不列缓存数量。
+Future<bool> confirmRemoveFromFolders({
+  required BuildContext context,
+  required String folderId,
+  required Iterable<BiliDownloadEntryInfo> entries,
+}) async {
+  final list = _uniqueEntries(entries);
+  if (list.isEmpty) {
+    return false;
+  }
+  final confirmed = await showConfirmDialog(
+    context: context,
+    title: Text(list.length == 1 ? '确定移出当前文件夹？' : '确定移出选中视频？'),
+    content: const Text('只移出文件夹分类，不会删除本地离线缓存。'),
+  );
+  if (!confirmed) {
+    return false;
+  }
+  SmartDialog.showLoading();
+  await removeFromFolders(folderId: folderId, entries: list);
+  SmartDialog.dismiss();
+  return true;
+}
+
+/// 确认后删除文件夹，只删关联，不动缓存文件。
+Future<bool> confirmDeleteFolders({
+  required BuildContext context,
+  required Iterable<DownloadFolder> folders,
+}) async {
+  final list = folders.toList();
+  if (list.isEmpty) {
+    return false;
+  }
+  final confirmed = await showConfirmDialog(
+    context: context,
+    title: Text(list.length == 1 ? '确定删除该文件夹？' : '确定删除选中文件夹？'),
+    content: const Text('只删除文件夹分类，不会删除本地离线缓存。'),
+  );
+  if (!confirmed) {
+    return false;
+  }
+  final folderService = Get.find<DownloadFolderService>();
+  for (final folder in list) {
+    await folderService.deleteFolder(folder.id);
+  }
   return true;
 }
 

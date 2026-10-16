@@ -8,6 +8,7 @@ import 'package:PiliPlus/models_new/download/download_info.dart';
 import 'package:PiliPlus/pages/common/multi_select/base.dart';
 import 'package:PiliPlus/pages/download/page/view.dart';
 import 'package:PiliPlus/pages/download/utils/cache_delete_confirm.dart';
+import 'package:PiliPlus/pages/download/utils/card_menu.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:get/get_core/src/get_main.dart';
@@ -155,7 +156,17 @@ class SeasonInfoItem extends StatelessWidget {
                             color: colorScheme.outline,
                           ),
                         ),
-                        season.pages.first.entries.first.moreBtn(colorScheme),
+                        season.pages.first.entries.first.moreBtn(
+                          colorScheme,
+                          extraItemsBuilder: (menuContext) =>
+                              buildGroupCardMenuItems(
+                                context: menuContext,
+                                entries: [
+                                  for (final page in season.pages)
+                                    ...page.entries,
+                                ],
+                              ),
+                        ),
                       ],
                     ),
                   ],

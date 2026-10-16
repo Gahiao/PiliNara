@@ -4,6 +4,7 @@ import 'dart:io' show Directory;
 import 'package:PiliPlus/models_new/download/bili_download_entry_info.dart';
 import 'package:PiliPlus/models_new/download/download_info.dart';
 import 'package:PiliPlus/models_new/download/download_playback.dart';
+import 'package:PiliPlus/services/download/download_folder_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
@@ -17,6 +18,7 @@ import 'package:get/get.dart';
 /// 因此条目一删就自动出组，不存在需要同步的第二份数据。
 class DownloadLibraryService extends GetxService {
   final _downloadService = Get.find<DownloadService>();
+  final _folderService = Get.find<DownloadFolderService>();
 
   /// 起播 5 秒内不记续播；距结束 400ms 内视为已看完。
   static const _minContinueProgressMs = 5000;
@@ -121,12 +123,19 @@ class DownloadLibraryService extends GetxService {
     for (final page in season.pages) ...page.entries,
   ];
 
-  /// 本地视频页的播放列表：合集 → 视频/分P 页 → 分P序号，只保留已缓存完成的。
+  /// 本地视频页的播放列表，只保留已缓存完成的条目。
   ///
-  /// [context] 为空或不是合集范围时，返回全部缓存。
+  /// 文件夹范围按用户在文件夹里排出的顺序；合集范围按 合集 → 视频/分P 页 →
+  /// 分P序号；[context] 为空或范围已失效时返回全部缓存。
   List<BiliDownloadEntryInfo> resolvePlaylist(
     DownloadVideoPlayContext? context,
   ) {
+    if (context?.isFolder == true) {
+      return _folderService
+          .resolveFolderEntries(context!.folderId!)
+          .where((e) => e.isCompleted)
+          .toList();
+    }
     final seasonKey = context?.isSeason == true ? context!.seasonKey : null;
     final list = <BiliDownloadEntryInfo>[];
     for (final season in seasons) {
@@ -155,9 +164,11 @@ class DownloadLibraryService extends GetxService {
       await clearLastLocalPlayedIfCid(entry.cid);
       return;
     }
-    final scope = playContext.isSeason
-        ? DownloadPlaylistScope.season
-        : DownloadPlaylistScope.all;
+    final scope = switch (playContext) {
+      final ctx when ctx.isFolder => DownloadPlaylistScope.folder,
+      final ctx when ctx.isSeason => DownloadPlaylistScope.season,
+      _ => DownloadPlaylistScope.all,
+    };
     await GStorage.localCache.put(
       LocalCacheKey.lastLocalPlayed,
       DownloadContinueRecord(
@@ -166,6 +177,9 @@ class DownloadLibraryService extends GetxService {
         scope: scope,
         seasonKey: scope == DownloadPlaylistScope.season
             ? playContext.seasonKey
+            : null,
+        folderId: scope == DownloadPlaylistScope.folder
+            ? playContext.folderId
             : null,
       ).toJson(),
     );
@@ -211,11 +225,18 @@ class DownloadLibraryService extends GetxService {
     }
     var playContext = const DownloadVideoPlayContext.all();
     final seasonKey = record.seasonKey;
+    final folderId = record.folderId;
     if (record.scope == DownloadPlaylistScope.season && seasonKey != null) {
       final season = seasonByKey(seasonKey);
       if (season != null &&
           entriesOfSeason(season).any((e) => e.cid == record.cid)) {
         playContext = DownloadVideoPlayContext.season(seasonKey);
+      }
+    } else if (record.scope == DownloadPlaylistScope.folder &&
+        folderId != null) {
+      final folder = _folderService.getFolder(folderId);
+      if (folder != null && folder.videoCids.contains(record.cid)) {
+        playContext = DownloadVideoPlayContext.folder(folderId);
       }
     }
     return DownloadContinueTarget(

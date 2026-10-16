@@ -2,9 +2,11 @@ import 'dart:io' show Platform;
 
 import 'package:PiliPlus/common/widgets/appbar/appbar.dart';
 import 'package:PiliPlus/common/widgets/flutter/pop_scope.dart';
+import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/models_new/download/bili_download_entry_info.dart';
+import 'package:PiliPlus/models_new/download/download_folder.dart';
 import 'package:PiliPlus/models_new/download/download_info.dart';
 import 'package:PiliPlus/models_new/download/download_playback.dart';
 import 'package:PiliPlus/pages/common/fab_mixin.dart';
@@ -14,10 +16,16 @@ import 'package:PiliPlus/pages/download/download/controller.dart';
 import 'package:PiliPlus/pages/download/download/widgets/page.dart';
 import 'package:PiliPlus/pages/download/download/widgets/season.dart';
 import 'package:PiliPlus/pages/download/download_action_mixin.dart';
+import 'package:PiliPlus/pages/download/folder/view.dart';
+import 'package:PiliPlus/pages/download/folder_manage/view.dart';
 import 'package:PiliPlus/pages/download/search/view.dart';
 import 'package:PiliPlus/pages/download/utils/cache_delete_confirm.dart';
 import 'package:PiliPlus/pages/download/utils/cache_export.dart';
+import 'package:PiliPlus/pages/download/utils/card_menu.dart';
 import 'package:PiliPlus/pages/download/utils/open_download_entry.dart';
+import 'package:PiliPlus/pages/download/widgets/folder_card.dart';
+import 'package:PiliPlus/pages/download/widgets/folder_dialog.dart';
+import 'package:PiliPlus/services/download/download_folder_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
 import 'package:PiliPlus/utils/grid.dart';
@@ -42,6 +50,7 @@ class _DownloadPageState extends State<DownloadPage>
         FabMixin<DownloadPage>,
         BaseDownloadActionMixin<DownloadPage, DownloadSeasonInfo> {
   final _progress = ChangeNotifier();
+  final _folderService = Get.find<DownloadFolderService>();
   final _controller = Get.put(DownloadController());
 
   bool _isOpeningContinue = false;
@@ -134,6 +143,149 @@ class _DownloadPageState extends State<DownloadPage>
     }
 
     toastUpdateResult(dismiss, isSuccess);
+  }
+
+  Future<void> _createFolder() async {
+    final title = await showDownloadFolderNameDialog(
+      context: context,
+      title: '新建文件夹',
+      initialValue: _folderService.buildDefaultFolderTitle(),
+    );
+    if (title == null) {
+      return;
+    }
+    await _folderService.createFolder(title);
+  }
+
+  Future<void> _renameFolder(DownloadFolder folder) async {
+    final title = await showDownloadFolderNameDialog(
+      context: context,
+      title: '重命名文件夹',
+      initialValue: folder.title,
+    );
+    if (title == null || title == folder.title) {
+      return;
+    }
+    await _folderService.renameFolder(folder.id, title);
+  }
+
+  Future<void> _openFolderManagePage() async {
+    await Get.to(const DownloadFolderManagePage());
+  }
+
+  Future<void> _addSelectedToFolders() async {
+    final folderIds = await showDownloadFolderPickerDialog(context: context);
+    if (folderIds == null || folderIds.isEmpty) {
+      return;
+    }
+    await _folderService.addVideosToFolders(
+      [
+        for (final season in _controller.allChecked)
+          ..._controller.libraryService.entriesOfSeason(season),
+      ].map((entry) => entry.cid),
+      folderIds,
+    );
+    _controller.handleSelect();
+    SmartDialog.showToast('已添加到文件夹');
+  }
+
+  /// 文件夹卡片的菜单：重命名 / 导出整组 / 删除。
+  ///
+  /// 删除只断开关联，缓存文件与自动分组都不受影响。
+  Widget _buildFolderMenu(DownloadFolder folder) {
+    return Builder(
+      builder: (context) => IconButton(
+        padding: EdgeInsets.zero,
+        icon: Icon(
+          Icons.more_vert_outlined,
+          color: Theme.of(context).colorScheme.outline,
+          size: 18,
+        ),
+        onPressed: () async {
+          final value = await showStaticPositionMenu<int>(
+            context: context,
+            items: [
+              const CustomPopupMenuItem(value: 0, child: Text('重命名')),
+              if (Platform.isAndroid)
+                const CustomPopupMenuItem(value: 1, child: Text('导出')),
+              CustomPopupMenuItem(
+                value: 2,
+                child: Text(
+                  '删除',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            ],
+          );
+          switch (value) {
+            case 0:
+              await _renameFolder(folder);
+            case 1:
+              await exportDownloadEntries(
+                _folderService.resolveFolderEntries(folder.id),
+              );
+            case 2:
+              // 弹确认框要用 context，这里必须先确认它还有效
+              if (!context.mounted) {
+                return;
+              }
+              await confirmDeleteFolders(context: context, folders: [folder]);
+          }
+        },
+      ),
+    );
+  }
+
+  /// 文件夹区：与自动分组同处一个列表，不另开页签。
+  Widget _buildFolderSection() {
+    return Obx(() {
+      final folders = _controller.folders;
+      if (folders.isEmpty) {
+        return const SliverToBoxAdapter();
+      }
+      return SliverMainAxisGroup(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.only(left: 12, bottom: 7, top: 7),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                children: [
+                  const Text('文件夹'),
+                  const Spacer(),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: _openFolderManagePage,
+                    child: const Text('管理'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverGrid.builder(
+            gridDelegate: gridDelegate,
+            itemCount: folders.length,
+            itemBuilder: (context, index) {
+              final folder = folders[index];
+              final entries = _folderService.resolveFolderEntries(folder.id);
+              return DownloadFolderCard(
+                title: folder.title,
+                count: entries.length,
+                entry: entries.firstOrNull,
+                onTap: () async {
+                  await Get.to(DownloadFolderPage(folderId: folder.id));
+                  if (mounted) {
+                    await _controller.libraryService.refreshContinueTarget();
+                  }
+                },
+                trailing: _buildFolderMenu(folder),
+              );
+            },
+          ),
+        ],
+      );
+    });
   }
 
   Future<void> _exportChecked() async {
@@ -230,6 +382,13 @@ class _DownloadPageState extends State<DownloadPage>
             actions: [
               // 更新弹幕 / 更新片段来自 mixin，作用于选中的整个合集
               updateBtn(),
+              TextButton(
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                onPressed: _controller.checkedCount == 0
+                    ? null
+                    : _addSelectedToFolders,
+                child: const Text('添加到'),
+              ),
               if (Platform.isAndroid)
                 TextButton(
                   style: TextButton.styleFrom(
@@ -255,6 +414,11 @@ class _DownloadPageState extends State<DownloadPage>
                     }
                   },
                   icon: const Icon(Icons.search),
+                ),
+                IconButton(
+                  tooltip: '新建文件夹',
+                  onPressed: _createFolder,
+                  icon: const Icon(Icons.create_new_folder_outlined),
                 ),
                 IconButton(
                   tooltip: '多选',
@@ -320,6 +484,7 @@ class _DownloadPageState extends State<DownloadPage>
                           ],
                         );
                       }),
+                      _buildFolderSection(),
                       Obx(() {
                         if (_controller.seasons.isEmpty) {
                           if (downloadService.waitDownloadQueue.isNotEmpty) {
@@ -379,6 +544,11 @@ class _DownloadPageState extends State<DownloadPage>
                                         _controller.onSelect(season),
                                     playContext:
                                         const DownloadVideoPlayContext.all(),
+                                    extraMoreItemsBuilder: (menuContext) =>
+                                        buildAddToFolderMenuItems(
+                                          context: menuContext,
+                                          entries: [entry],
+                                        ),
                                     onPlayReturned: _controller
                                         .libraryService
                                         .refreshContinueTarget,

@@ -77,7 +77,12 @@ class BiliDownloadEntryInfo with MultiSelectData {
         entries: [this],
       );
 
-  Widget moreBtn(ColorScheme colorScheme) => SizedBox(
+  /// 条目菜单；[extraItemsBuilder] 让分组卡片追加自己的动作（导出整组、加入
+  /// 文件夹），模型本身不认识文件夹与导出流程。
+  Widget moreBtn(
+    ColorScheme colorScheme, {
+    List<PopupMenuEntry<void>> Function(BuildContext context)? extraItemsBuilder,
+  }) => SizedBox(
     width: 29,
     height: 29,
     child: Builder(
@@ -149,6 +154,7 @@ class BiliDownloadEntryInfo with MultiSelectData {
                   ),
                   onTap: () => Get.toNamed('/member?mid=$mid'),
                 ),
+              ...?extraItemsBuilder?.call(context),
             ],
           );
         },

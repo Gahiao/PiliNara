@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:PiliPlus/common/widgets/appbar/appbar.dart';
 import 'package:PiliPlus/common/widgets/flutter/pop_scope.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
@@ -11,6 +13,8 @@ import 'package:PiliPlus/pages/download/detail/widgets/item.dart';
 import 'package:PiliPlus/pages/download/download/widgets/page.dart';
 import 'package:PiliPlus/pages/download/download_action_mixin.dart';
 import 'package:PiliPlus/pages/download/utils/cache_delete_confirm.dart';
+import 'package:PiliPlus/pages/download/utils/cache_export.dart';
+import 'package:PiliPlus/pages/download/utils/card_menu.dart';
 import 'package:PiliPlus/services/download/download_library_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
@@ -131,6 +135,14 @@ class _DownloadPagePageState extends State<DownloadPagePage>
     toastUpdateResult(dismiss, isSuccess);
   }
 
+  Future<void> _exportSelected() async {
+    final entries = [
+      for (final page in allChecked) ...page.entries,
+    ];
+    handleSelect();
+    await exportDownloadEntries(entries);
+  }
+
   @override
   void onRemove() {
     confirmDeletePages(
@@ -164,7 +176,17 @@ class _DownloadPagePageState extends State<DownloadPagePage>
           appBar: MultiSelectAppBarWidget(
             ctr: this,
             visible: enableMultiSelect,
-            actions: [updateBtn()],
+            actions: [
+              updateBtn(),
+              if (Platform.isAndroid)
+                TextButton(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: checkedCount == 0 ? null : _exportSelected,
+                  child: const Text('导出'),
+                ),
+            ],
             child: AppBar(
               title: Text(title ?? '合集'),
               actions: [
@@ -207,6 +229,11 @@ class _DownloadPagePageState extends State<DownloadPagePage>
                           playContext: DownloadVideoPlayContext.season(
                             widget.seasonKey,
                           ),
+                          extraMoreItemsBuilder: (menuContext) =>
+                              buildAddToFolderMenuItems(
+                                context: menuContext,
+                                entries: [entry],
+                              ),
                         );
                       }
                       return PageInfoItem(
