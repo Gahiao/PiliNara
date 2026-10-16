@@ -119,9 +119,16 @@ class DownloadLibraryService extends GetxService {
   DownloadSeasonInfo? seasonByKey(String seasonKey) =>
       seasons.firstWhereOrNull((e) => e.playlistKey == seasonKey);
 
-  List<BiliDownloadEntryInfo> entriesOfSeason(DownloadSeasonInfo season) => [
-    for (final page in season.pages) ...page.entries,
-  ];
+  /// 一个视频页的全部条目，按页内分P / 集序号。
+  List<BiliDownloadEntryInfo> entriesOfPage(DownloadPageInfo page) =>
+      page.entries.toList()..sort(downloadEntrySort);
+
+  /// 一个合集的全部条目，按 合集 → 视频页 → 分P 的顺序。
+  List<BiliDownloadEntryInfo> entriesOfSeason(DownloadSeasonInfo season) {
+    final pages = season.pages.toList()
+      ..sort((a, b) => a.sortKey.compareTo(b.sortKey));
+    return [for (final page in pages) ...entriesOfPage(page)];
+  }
 
   /// 本地视频页的播放列表，只保留已缓存完成的条目。
   ///
@@ -142,10 +149,7 @@ class DownloadLibraryService extends GetxService {
       if (seasonKey != null && season.playlistKey != seasonKey) {
         continue;
       }
-      for (final page in season.pages) {
-        final items = page.entries.toList()..sort(downloadEntrySort);
-        list.addAll(items.where((e) => e.isCompleted));
-      }
+      list.addAll(entriesOfSeason(season).where((e) => e.isCompleted));
     }
     return list;
   }
@@ -235,7 +239,10 @@ class DownloadLibraryService extends GetxService {
     } else if (record.scope == DownloadPlaylistScope.folder &&
         folderId != null) {
       final folder = _folderService.getFolder(folderId);
-      if (folder != null && folder.videoCids.contains(record.cid)) {
+      if (folder != null &&
+          _folderService
+              .resolveFolderEntries(folderId)
+              .any((entry) => entry.cid == record.cid)) {
         playContext = DownloadVideoPlayContext.folder(folderId);
       }
     }

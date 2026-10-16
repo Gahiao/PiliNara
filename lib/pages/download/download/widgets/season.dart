@@ -4,6 +4,7 @@ import 'package:PiliPlus/common/widgets/dialog/simple_dialog_option.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/select_mask.dart';
 import 'package:PiliPlus/models_new/download/bili_download_entry_info.dart';
+import 'package:PiliPlus/models_new/download/download_folder.dart';
 import 'package:PiliPlus/models_new/download/download_info.dart';
 import 'package:PiliPlus/pages/common/multi_select/base.dart';
 import 'package:PiliPlus/pages/download/page/view.dart';
@@ -16,22 +17,29 @@ import 'package:get/get_navigation/src/extension_navigation.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 合集卡片：一个 UGC 合集就是一个合集，PGC 一季走 [PageInfoItem]。
-class SeasonInfoItem extends StatelessWidget {
+///
+/// 多选对象由 [selectable] 给出：在缓存首页就是这张卡片对应的
+/// [DownloadSeasonInfo]，在手动文件夹里则是那张卡片的替身条目。
+class SeasonInfoItem<T extends MultiSelectData> extends StatelessWidget {
   const SeasonInfoItem({
     super.key,
     required this.controller,
     required this.downloadService,
     required this.season,
     required this.seasonInfo,
+    required this.selectable,
     required this.enableMultiSelect,
     required this.progress,
     required this.updateSeasonDm,
   });
 
-  final BaseMultiSelectMixin<DownloadSeasonInfo> controller;
+  final BaseMultiSelectMixin<T> controller;
   final DownloadService downloadService;
   final DownloadSeasonInfo season;
   final SeasonInfo seasonInfo;
+
+  /// 多选时被勾选的对象。
+  final T selectable;
   final bool enableMultiSelect;
   final ChangeNotifier progress;
   final ValueChanged<DownloadSeasonInfo> updateSeasonDm;
@@ -80,7 +88,7 @@ class SeasonInfoItem extends StatelessWidget {
       child: InkWell(
         onTap: () {
           if (controller.enableMultiSelect.value) {
-            controller.onSelect(season);
+            controller.onSelect(selectable);
             return;
           }
           Get.to(
@@ -123,7 +131,7 @@ class SeasonInfoItem extends StatelessWidget {
                     type: .gray,
                   ),
                   Positioned.fill(
-                    child: selectMask(colorScheme, season.checked),
+                    child: selectMask(colorScheme, selectable.checked),
                   ),
                 ],
               ),
@@ -165,6 +173,7 @@ class SeasonInfoItem extends StatelessWidget {
                                   for (final page in season.pages)
                                     ...page.entries,
                                 ],
+                                item: season.toFolderItem(),
                               ),
                         ),
                       ],

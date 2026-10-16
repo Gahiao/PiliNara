@@ -6,6 +6,7 @@ import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_sliver_safe_area.dart';
 import 'package:PiliPlus/models_new/download/bili_download_entry_info.dart';
+import 'package:PiliPlus/models_new/download/download_folder.dart';
 import 'package:PiliPlus/models_new/download/download_playback.dart';
 import 'package:PiliPlus/pages/common/multi_select/base.dart'
     show BaseMultiSelectMixin;
@@ -14,10 +15,13 @@ import 'package:PiliPlus/pages/download/download_action_mixin.dart';
 import 'package:PiliPlus/pages/download/utils/cache_delete_confirm.dart';
 import 'package:PiliPlus/pages/download/utils/cache_export.dart';
 import 'package:PiliPlus/pages/download/utils/card_menu.dart';
+import 'package:PiliPlus/pages/download/widgets/folder_dialog.dart';
+import 'package:PiliPlus/services/download/download_folder_service.dart';
 import 'package:PiliPlus/services/download/download_library_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/grid.dart';
 import 'package:collection/collection.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart'
     hide SliverGridDelegateWithMaxCrossAxisExtent;
@@ -102,6 +106,24 @@ class _DownloadDetailPageState extends State<DownloadDetailPage>
     await exportDownloadEntries(entries);
   }
 
+  /// 在视频页内部勾选得到的是独立条目，哪怕整页都选上了。
+  Future<void> _addSelectedToFolder() async {
+    final items = DownloadFolderItem.ofEntries(allChecked);
+    if (items.isEmpty) {
+      return;
+    }
+    final folderIds = await showDownloadFolderPickerDialog(context: context);
+    if (folderIds == null || folderIds.isEmpty) {
+      return;
+    }
+    final added = await Get.find<DownloadFolderService>().addItemsToFolders(
+      items,
+      folderIds,
+    );
+    handleSelect();
+    SmartDialog.showToast(added == 0 ? '已经在文件夹里了' : '已添加到文件夹');
+  }
+
   @override
   void onRemove() {
     confirmDeleteEntries(
@@ -133,6 +155,13 @@ class _DownloadDetailPageState extends State<DownloadDetailPage>
             visible: enableMultiSelect,
             actions: [
               updateBtn(),
+              TextButton(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: checkedCount == 0 ? null : _addSelectedToFolder,
+                child: const Text('添加到'),
+              ),
               if (Platform.isAndroid)
                 TextButton(
                   style: TextButton.styleFrom(
@@ -183,7 +212,7 @@ class _DownloadDetailPageState extends State<DownloadDetailPage>
                             entries: [entry],
                           ),
                           extraMoreItemsBuilder: (menuContext) =>
-                              buildAddToFolderMenuItems(
+                              buildAddEntriesToFolderMenuItems(
                                 context: menuContext,
                                 entries: [entry],
                               ),

@@ -174,18 +174,20 @@ Future<bool> confirmDeletePages({
 }
 
 /// 把条目移出给定文件夹，只断开关联，不动缓存文件。
-Future<void> removeFromFolders({
+///
+/// 移出的是条目本身：合集卡 / 视频页卡整张移出，而不是把它里面的成员摘掉
+/// ——成员跟着合集走，摘不掉。
+Future<void> removeItemsFromFolders({
   required String folderId,
-  required Iterable<BiliDownloadEntryInfo> entries,
+  required Iterable<DownloadFolderItem> items,
 }) async {
-  final list = _uniqueEntries(entries);
+  final list = items.toList(growable: false);
   if (list.isEmpty) {
     return;
   }
-  await Get.find<DownloadFolderService>().removeVideosFromFolders(
-    list.map((entry) => entry.cid),
-    [folderId],
-  );
+  await Get.find<DownloadFolderService>().removeItemsFromFolders(list, [
+    folderId,
+  ]);
 }
 
 /// 确认后把条目移出当前文件夹。
@@ -194,22 +196,22 @@ Future<void> removeFromFolders({
 Future<bool> confirmRemoveFromFolders({
   required BuildContext context,
   required String folderId,
-  required Iterable<BiliDownloadEntryInfo> entries,
+  required Iterable<DownloadFolderItem> items,
 }) async {
-  final list = _uniqueEntries(entries);
+  final list = items.toList(growable: false);
   if (list.isEmpty) {
     return false;
   }
   final confirmed = await showConfirmDialog(
     context: context,
-    title: Text(list.length == 1 ? '确定移出当前文件夹？' : '确定移出选中视频？'),
+    title: Text(list.length == 1 ? '确定移出当前文件夹？' : '确定移出选中内容？'),
     content: const Text('只移出文件夹分类，不会删除本地离线缓存。'),
   );
   if (!confirmed) {
     return false;
   }
   SmartDialog.showLoading();
-  await removeFromFolders(folderId: folderId, entries: list);
+  await removeItemsFromFolders(folderId: folderId, items: list);
   SmartDialog.dismiss();
   return true;
 }

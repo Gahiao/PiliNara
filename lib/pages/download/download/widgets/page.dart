@@ -3,6 +3,7 @@ import 'package:PiliPlus/common/widgets/badge.dart';
 import 'package:PiliPlus/common/widgets/dialog/simple_dialog_option.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/select_mask.dart';
+import 'package:PiliPlus/models_new/download/download_folder.dart';
 import 'package:PiliPlus/models_new/download/download_info.dart';
 import 'package:PiliPlus/pages/common/multi_select/base.dart';
 import 'package:PiliPlus/pages/download/detail/view.dart';
@@ -17,12 +18,15 @@ import 'package:get/get_navigation/src/extension_navigation.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 一个「视频页」的卡片：分P 视频、PGC 一季、或合集里的单个视频。
+///
+/// 多选对象由 [selectable] 给出：在分组列表里就是这张卡片对应的
+/// [DownloadPageInfo]，在手动文件夹里则是那张卡片的替身条目。
 class PageInfoItem<T extends MultiSelectData> extends StatelessWidget {
   const PageInfoItem({
     super.key,
     required this.controller,
     required this.downloadService,
-    required this.seasonInfo,
+    required this.selectable,
     required this.pageInfo,
     required this.seasonKey,
     required this.enableMultiSelect,
@@ -32,7 +36,7 @@ class PageInfoItem<T extends MultiSelectData> extends StatelessWidget {
 
   final BaseMultiSelectMixin<T> controller;
   final DownloadService downloadService;
-  final T seasonInfo;
+  final T selectable;
   final DownloadPageInfo pageInfo;
 
   /// 所属合集的 [DownloadSeasonInfo.playlistKey]，用于播放范围与页内跳转。
@@ -85,7 +89,7 @@ class PageInfoItem<T extends MultiSelectData> extends StatelessWidget {
       child: InkWell(
         onTap: () {
           if (controller.enableMultiSelect.value) {
-            controller.onSelect(seasonInfo);
+            controller.onSelect(selectable);
             return;
           }
           Get.to(
@@ -135,7 +139,7 @@ class PageInfoItem<T extends MultiSelectData> extends StatelessWidget {
                         top: 6.0,
                       ),
                   Positioned.fill(
-                    child: selectMask(colorScheme, seasonInfo.checked),
+                    child: selectMask(colorScheme, selectable.checked),
                   ),
                 ],
               ),
@@ -174,6 +178,7 @@ class PageInfoItem<T extends MultiSelectData> extends StatelessWidget {
                               buildGroupCardMenuItems(
                                 context: menuContext,
                                 entries: pageInfo.entries,
+                                item: pageInfo.toFolderItem(),
                               ),
                         ),
                       ],

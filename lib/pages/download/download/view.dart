@@ -116,35 +116,6 @@ class _DownloadPageState extends State<DownloadPage>
     toastUpdateResult(dismiss, isSuccess);
   }
 
-  Future<void> _updateSeasonDm(DownloadSeasonInfo seasonInfo) async {
-    if (checkUpdateCount(
-      seasonInfo.pages.fold(0, (a, b) => a + b.entries.length),
-    )) {
-      return;
-    }
-
-    bool dismiss = false;
-    SmartDialog.showLoading(onDismiss: () => dismiss = true);
-
-    bool isSuccess = true;
-
-    for (final page in seasonInfo.pages) {
-      for (final chunk in page.entries.mapChunked(
-        kUpdateConcurrency,
-        (e) => downloadService.downloadDanmaku(
-          entry: e,
-          isUpdate: true,
-        ),
-      )) {
-        final res = await Future.wait(chunk);
-        if (res.any((e) => !e)) isSuccess = false;
-        if (dismiss) break;
-      }
-    }
-
-    toastUpdateResult(dismiss, isSuccess);
-  }
-
   Future<void> _createFolder() async {
     final title = await showDownloadFolderNameDialog(
       context: context,
@@ -178,15 +149,12 @@ class _DownloadPageState extends State<DownloadPage>
     if (folderIds == null || folderIds.isEmpty) {
       return;
     }
-    await _folderService.addVideosToFolders(
-      [
-        for (final season in _controller.allChecked)
-          ..._controller.libraryService.entriesOfSeason(season),
-      ].map((entry) => entry.cid),
+    final added = await _folderService.addItemsToFolders(
+      _controller.allChecked.map((season) => season.toFolderItem()),
       folderIds,
     );
     _controller.handleSelect();
-    SmartDialog.showToast('已添加到文件夹');
+    SmartDialog.showToast(added == 0 ? '已经在文件夹里了' : '已添加到文件夹');
   }
 
   /// 文件夹卡片的菜单：重命名 / 导出整组 / 删除。
@@ -518,11 +486,12 @@ class _DownloadPageState extends State<DownloadPage>
                                   return SeasonInfoItem(
                                     controller: _controller,
                                     downloadService: downloadService,
-                                    seasonInfo: seasonInfo,
                                     season: season,
+                                    seasonInfo: seasonInfo,
+                                    selectable: season,
                                     enableMultiSelect: enableMultiSelect,
                                     progress: _progress,
-                                    updateSeasonDm: _updateSeasonDm,
+                                    updateSeasonDm: updateSeasonDm,
                                   );
                                 }
 
@@ -545,7 +514,7 @@ class _DownloadPageState extends State<DownloadPage>
                                     playContext:
                                         const DownloadVideoPlayContext.all(),
                                     extraMoreItemsBuilder: (menuContext) =>
-                                        buildAddToFolderMenuItems(
+                                        buildAddEntriesToFolderMenuItems(
                                           context: menuContext,
                                           entries: [entry],
                                         ),
@@ -561,7 +530,7 @@ class _DownloadPageState extends State<DownloadPage>
                                 return PageInfoItem(
                                   controller: _controller,
                                   downloadService: downloadService,
-                                  seasonInfo: season,
+                                  selectable: season,
                                   pageInfo: page,
                                   seasonKey: season.playlistKey,
                                   enableMultiSelect: enableMultiSelect,
