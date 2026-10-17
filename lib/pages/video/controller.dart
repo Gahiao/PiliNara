@@ -165,6 +165,8 @@ class VideoDetailController extends GetxController
   // 是否开始自动播放 存在多p的情况下，第二p需要为true
   final RxBool _autoPlay = Pref.autoPlayEnable.obs;
 
+  bool _autoPlayNetworkChecked = false;
+
   final videoPlayerKey = GlobalKey();
   final childKey = GlobalKey<MiniScaffoldState>();
 
@@ -1123,11 +1125,23 @@ class VideoDetailController extends GetxController
     bool autoFullScreenFlag,
     bool reinitializePlayer,
   ) async {
+    bool? netIsWiFi;
+    if (!_autoPlayNetworkChecked) {
+      _autoPlayNetworkChecked = true;
+      if (PlatformUtils.isMobile &&
+          _autoPlay.value &&
+          Pref.autoPlayWifiOnly) {
+        netIsWiFi = await ConnectivityUtils.isWiFi;
+        if (!netIsWiFi) {
+          _autoPlay.value = false;
+        }
+      }
+    }
     if (plPlayerController.enableSponsorBlock && isBlock && !fromReset) {
       querySponsorBlock(bvid: bvid, cid: cid.value);
     }
     if (plPlayerController.cacheVideoQa == null) {
-      final isWiFi = await ConnectivityUtils.isWiFi;
+      final isWiFi = netIsWiFi ?? await ConnectivityUtils.isWiFi;
       final fsQa = isWiFi ? Pref.defaultVideoQa : Pref.defaultVideoQaCellular;
       final halfScreenQa = Pref.defaultVideoQaHalfScreen;
       plPlayerController
