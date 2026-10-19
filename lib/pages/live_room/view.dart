@@ -73,6 +73,7 @@ class LiveRoomPage extends StatefulWidget {
 class _LiveRoomPageState extends State<LiveRoomPage>
     with WidgetsBindingObserver, RouteAware, RouteAwareMixin {
   late final fullScreenSCWidth = Pref.fullScreenSCWidth;
+  PlayOwner get _playOwner => (tag: heroTag, type: null);
   final String heroTag = Utils.generateRandomString(6);
   late final LiveRoomController _liveRoomController;
   late final PlPlayerController plPlayerController;
@@ -204,7 +205,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
     );
     plPlayerController = _liveRoomController.plPlayerController
       ..addStatusLister(playerListener);
-    PlPlayerController.setPlayCallBack(plPlayerController.play);
+    _setPlayCallBack();
     _liveRoomController.onRequestInAppPip = _enterLivePipManually;
 
     if (isReturningFromPip) {
@@ -222,6 +223,13 @@ class _LiveRoomPageState extends State<LiveRoomPage>
         hideSystemBar();
       }
     }
+  }
+
+  void _setPlayCallBack() {
+    PlPlayerController.setPlayCallBack(
+      plPlayerController.play,
+      playOwner: _playOwner,
+    );
   }
 
   @override
@@ -243,9 +251,25 @@ class _LiveRoomPageState extends State<LiveRoomPage>
     plPlayerController.screenRatio = maxHeight / maxWidth;
   }
 
+  void _onPushPopupRoute() {
+    _liveRoomController.isPlaying = plPlayerController.playerStatus.isPlaying;
+  }
+
+  void _onPopPopupRoute() {
+    if (!mounted) return;
+    if (PlPlayerController.playOwner != _playOwner) {
+      _onPopNext();
+    }
+  }
+
   @override
-  Future<void> didPopNext() async {
+  void didPopNext() {
     addObserverMobile(this);
+    _onPopNext();
+    super.didPopNext();
+  }
+
+  Future<void> _onPopNext() async {
 
     // 如果返回当前页面时应用内小窗正在运行，且房间号匹配，说明是从正在小窗播放的页面返回
     if (LivePipOverlayService.isInPipMode) {
@@ -285,7 +309,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
     }
     plPlayerController.danmakuController =
         _liveRoomController.danmakuController;
-    PlPlayerController.setPlayCallBack(plPlayerController.play);
+    _setPlayCallBack();
     _liveRoomController.startLiveTimer();
 
     // 如果是从小窗返回，直接恢复状态，不重新初始化
@@ -294,7 +318,6 @@ class _LiveRoomPageState extends State<LiveRoomPage>
         ..danmakuController?.resume()
         ..startLiveMsg();
       plPlayerController.addStatusLister(playerListener);
-      super.didPopNext();
       return;
     }
 
@@ -335,7 +358,6 @@ class _LiveRoomPageState extends State<LiveRoomPage>
     }
     if (!mounted) return;
     plPlayerController.addStatusLister(playerListener);
-    super.didPopNext();
   }
 
   @override
@@ -970,6 +992,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
 
   void _showRank() {
     if (_liveRoomController.ruid case final ruid?) {
+      _onPushPopupRoute();
       final heightFactor = PlatformUtils.isMobile && !isPortrait ? 1.0 : 0.7;
       showModalBottomSheet(
         context: context,
@@ -985,7 +1008,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
             roomId: _liveRoomController.roomId,
           ),
         ),
-      );
+      ).whenComplete(_onPopPopupRoute);
     }
   }
 
