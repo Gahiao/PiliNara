@@ -33,7 +33,7 @@ class _ReplySettingState extends State<ReplySetting> {
         }
         // 关键词过滤不一定在首位（上游分栏后首项是「显示视频评论」），按标题定位
         for (final item in list) {
-          if (item is NormalModel && item.effectiveTitle == '关键词过滤') {
+          if (item is NormalModel && item.effectiveTitle == '评论关键词过滤') {
             item.onTap?.call(context, () {
               if (mounted) {
                 setState(() {});
@@ -53,7 +53,7 @@ class _ReplySettingState extends State<ReplySetting> {
     final theme = Theme.of(context);
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      appBar: showAppBar ? AppBar(title: const Text('评论区过滤设置')) : null,
+      appBar: showAppBar ? AppBar(title: const Text('评论设置')) : null,
       body: ListView(
         padding: EdgeInsets.only(
           left: showAppBar ? padding.left : 0,

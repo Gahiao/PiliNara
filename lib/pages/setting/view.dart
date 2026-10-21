@@ -7,6 +7,8 @@ import 'package:PiliPlus/models/common/setting_type.dart';
 import 'package:PiliPlus/pages/about/view.dart';
 import 'package:PiliPlus/pages/login/controller.dart';
 import 'package:PiliPlus/pages/setting/common_setting.dart';
+import 'package:PiliPlus/pages/setting/dynamics_setting.dart';
+import 'package:PiliPlus/pages/setting/reply_setting.dart';
 import 'package:PiliPlus/pages/setting/widgets/multi_select_dialog.dart';
 import 'package:PiliPlus/pages/webdav/view.dart';
 import 'package:PiliPlus/utils/accounts.dart';
@@ -56,7 +58,7 @@ class _SettingPageState extends State<SettingPage> {
     ),
     _SettingsModel(
       type: .dynamicsSetting,
-      subtitle: '关键词过滤、屏蔽用户、带货动态屏蔽',
+      subtitle: '动态展示、关键词过滤、屏蔽用户、带货动态屏蔽',
       icon: Icon(Icons.dynamic_feed_outlined),
     ),
     _SettingsModel(
@@ -76,7 +78,7 @@ class _SettingPageState extends State<SettingPage> {
     ),
     _SettingsModel(
       type: .replySetting,
-      subtitle: '过滤、屏蔽、记录、默认展示等',
+      subtitle: '评论展示、过滤、屏蔽、记录等',
       icon: Icon(Icons.comment_outlined),
     ),
     _SettingsModel(
@@ -130,13 +132,13 @@ class _SettingPageState extends State<SettingPage> {
                   Expanded(
                     flex: 6,
                     child: switch (_type) {
+                      .dynamicsSetting => const DynamicsSetting(showAppBar: false),
+                      .replySetting => const ReplySetting(showAppBar: false),
                       .privacySetting ||
                       .recommendSetting ||
-                      .dynamicsSetting ||
                       .videoSetting ||
                       .playSetting ||
                       .dmSetting ||
-                      .replySetting ||
                       .styleSetting ||
                       .extraSetting => CommonSetting(
                         settingType: _type,
@@ -164,13 +166,13 @@ class _SettingPageState extends State<SettingPage> {
     if (_isPortrait) {
       Get.to(
         () => switch (type) {
+          .dynamicsSetting => const DynamicsSetting(),
+          .replySetting => const ReplySetting(),
           .privacySetting ||
           .recommendSetting ||
-          .dynamicsSetting ||
           .videoSetting ||
           .playSetting ||
           .dmSetting ||
-          .replySetting ||
           .styleSetting ||
           .extraSetting => CommonSetting(settingType: type),
           .webdavSetting => const WebDavSettingPage(),

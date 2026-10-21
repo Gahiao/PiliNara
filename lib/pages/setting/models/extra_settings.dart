@@ -14,7 +14,6 @@ import 'package:PiliPlus/models/common/sponsor_block/skip_type.dart';
 import 'package:PiliPlus/pages/common/slide/common_slide_page.dart';
 import 'package:PiliPlus/pages/home/controller.dart';
 import 'package:PiliPlus/pages/setting/models/model.dart';
-import 'package:PiliPlus/pages/setting/reply_setting.dart';
 import 'package:PiliPlus/pages/setting/widgets/slider_dialog.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/accounts.dart';
@@ -304,12 +303,6 @@ List<SettingsModel> get extraSettings => [
     leading: Icon(Icons.preview_outlined),
     setKey: SettingBoxKey.preReleaseUpdate,
     defaultVal: false,
-  ),
-  NormalModel(
-    title: '评论区过滤设置',
-    leading: const Icon(Icons.comment_outlined),
-    getSubtitle: () => '关键词、用户屏蔽、等级过滤、屏蔽带货评论',
-    onTap: (context, _) => Get.to(() => const ReplySetting()),
   ),
 ];
 

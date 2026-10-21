@@ -15,15 +15,6 @@ import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart' hide RefreshIndicator;
 
 List<SettingsModel> get dynamicsSettings => [
-  // 关键词过滤必须保持在首位：动态页的快捷入口按 list.first 打开它
-  getListBanWordModel(
-    title: '关键词过滤',
-    key: SettingBoxKey.banWordForDyn,
-    onChanged: (value) {
-      DynamicsDataModel.banWordForDyn = value;
-      DynamicsDataModel.enableFilter = value.pattern.isNotEmpty;
-    },
-  ),
   SplitModel(
     normalModel: const NormalModel.split(
       title: '检查未读动态',
@@ -37,6 +28,13 @@ List<SettingsModel> get dynamicsSettings => [
       onTap: _showDynDialog,
     ),
   ),
+  const SwitchModel(
+    title: '发布/转发动态反诈',
+    subtitle: '发布/转发动态后检查动态是否可见',
+    leading: Icon(CustomIcons.shield_published),
+    setKey: SettingBoxKey.enableCreateDynAntifraud,
+    defaultVal: false,
+  ),
   SwitchModel(
     title: '显示动态警告/争议信息',
     leading: const Icon(Icons.warning_amber_rounded),
@@ -44,8 +42,39 @@ List<SettingsModel> get dynamicsSettings => [
     defaultVal: false,
     onChanged: (val) => ItemModulesModel.showDynDispute = val,
   ),
+  const SwitchModel(
+    title: '动态/专栏详情页展示底部操作栏',
+    leading: Icon(Icons.more_horiz),
+    setKey: SettingBoxKey.showDynActionBar,
+    defaultVal: true,
+  ),
+  PopupModel(
+    title: '动态展示',
+    leading: const Icon(Icons.dynamic_feed_rounded),
+    value: () => Pref.defaultDynamicType,
+    items: DynamicsTabType.values.take(4),
+    onSelected: (value, setState) => GStorage.setting
+        .put(SettingBoxKey.defaultDynamicType, value.index)
+        .whenComplete(setState),
+  ),
+  SwitchModel(
+    title: '显示动态互动内容',
+    subtitle: '开启后则在动态卡片底部显示互动内容（如关注的人点赞、热评等）',
+    leading: const Icon(Icons.quickreply_outlined),
+    setKey: SettingBoxKey.showDynInteraction,
+    defaultVal: true,
+    onChanged: (val) => ItemModulesModel.showDynInteraction = val,
+  ),
+  getListBanWordModel(
+    title: '动态关键词过滤',
+    key: SettingBoxKey.banWordForDyn,
+    onChanged: (value) {
+      DynamicsDataModel.banWordForDyn = value;
+      DynamicsDataModel.enableFilter = value.pattern.isNotEmpty;
+    },
+  ),
   getListUidModel(
-    title: '屏蔽用户',
+    title: '动态屏蔽用户',
     getUids: () => Pref.dynamicsBlockedMids,
     setUids: (uids) {
       Pref.dynamicsBlockedMids = uids;
@@ -57,7 +86,7 @@ List<SettingsModel> get dynamicsSettings => [
     },
   ),
   getListUidWithNameModel(
-    title: '白名单用户',
+    title: '动态白名单用户',
     leading: const Icon(Icons.person_add_alt_1_outlined),
     emptySubtitle: '点击添加白名单用户',
     countSubtitleBuilder: (count) => '已加入白名单 $count 个用户',
@@ -76,13 +105,6 @@ List<SettingsModel> get dynamicsSettings => [
     onChanged: (value) {
       DynamicsDataModel.antiGoodsDyn = value;
     },
-  ),
-  const SwitchModel(
-    title: '发布/转发动态反诈',
-    subtitle: '发布/转发动态后检查动态是否可见',
-    leading: Icon(CustomIcons.shield_published),
-    setKey: SettingBoxKey.enableCreateDynAntifraud,
-    defaultVal: false,
   ),
   SwitchModel(
     title: '屏蔽无权查看的动态',
@@ -114,29 +136,7 @@ List<SettingsModel> get dynamicsSettings => [
       DynamicsDataModel.removeDynVideoDyn = value;
     },
   ),
-  const SwitchModel(
-    title: '动态/专栏详情页展示底部操作栏',
-    leading: Icon(Icons.more_horiz),
-    setKey: SettingBoxKey.showDynActionBar,
-    defaultVal: true,
-  ),
-  PopupModel(
-    title: '动态展示',
-    leading: const Icon(Icons.dynamic_feed_rounded),
-    value: () => Pref.defaultDynamicType,
-    items: DynamicsTabType.values.take(4),
-    onSelected: (value, setState) => GStorage.setting
-        .put(SettingBoxKey.defaultDynamicType, value.index)
-        .whenComplete(setState),
-  ),
-  SwitchModel(
-    title: '显示动态互动内容',
-    subtitle: '开启后则在动态卡片底部显示互动内容（如关注的人点赞、热评等）',
-    leading: const Icon(Icons.quickreply_outlined),
-    setKey: SettingBoxKey.showDynInteraction,
-    defaultVal: true,
-    onChanged: (val) => ItemModulesModel.showDynInteraction = val,
-  ),
+
 ];
 
 void _showDynDialog(BuildContext context) {

@@ -60,6 +60,46 @@ List<SettingsModel> get replySettings => [
       setKey: SettingBoxKey.biliSendCommAntifraud,
       defaultVal: false,
     ),
+  const SwitchModel(
+    title: '评论点赞/点踩按钮交换位置',
+    subtitle: '交换后：点赞在左，点踩在右（与官方客户端一致）',
+    leading: Icon(Icons.swap_horiz),
+    setKey: SettingBoxKey.swapReplyLikeDislike,
+    defaultVal: false,
+  ),
+  SwitchModel(
+    title: '评论区搜索关键词',
+    subtitle: '展示评论区搜索关键词',
+    leading: const Icon(Icons.search_outlined),
+    setKey: SettingBoxKey.enableWordRe,
+    defaultVal: false,
+    onChanged: (value) => ReplyItemGrpc.enableWordRe = value,
+  ),
+  const SwitchModel(
+    title: '默认展示评论区',
+    subtitle: '在视频详情页默认切换至评论区页（仅Tab型布局）',
+    leading: Icon(Icons.mode_comment_outlined),
+    setKey: SettingBoxKey.defaultShowComment,
+    defaultVal: false,
+  ),
+  PopupModel(
+    title: '评论展示',
+    leading: const Icon(Icons.whatshot_outlined),
+    value: () => Pref.replySortType,
+    items: ReplySortType.values.take(2),
+    onSelected: (value, setState) => GStorage.setting
+        .put(SettingBoxKey.replySortType, value.index)
+        .whenComplete(setState),
+  ),
+  PopupModel(
+    title: '楼中楼评论展示',
+    leading: const Icon(Icons.subdirectory_arrow_right_outlined),
+    value: () => Pref.reply2SortType,
+    items: ReplySortType.values.take(2),
+    onSelected: (value, setState) => GStorage.setting
+        .put(SettingBoxKey.reply2SortType, value.index)
+        .whenComplete(setState),
+  ),
   SwitchModel(
     title: '屏蔽带货评论',
     subtitle: '过滤包含商品推广的评论',
@@ -84,13 +124,6 @@ List<SettingsModel> get replySettings => [
     title: '屏蔽复制简介评论',
     leading: Icon(Icons.summarize),
     setKey: SettingBoxKey.filterIntro,
-    defaultVal: false,
-  ),
-  const SwitchModel(
-    title: '评论点赞/点踩按钮交换位置',
-    subtitle: '交换后：点赞在左，点踩在右（与官方客户端一致）',
-    leading: Icon(Icons.swap_horiz),
-    setKey: SettingBoxKey.swapReplyLikeDislike,
     defaultVal: false,
   ),
   SwitchModel(
@@ -126,7 +159,7 @@ List<SettingsModel> get replySettings => [
     onChanged: (value) => ReplyGrpc.keepUpReplyReply = value,
   ),
   getListBanWordModel(
-    title: '关键词过滤',
+    title: '评论关键词过滤',
     key: SettingBoxKey.banWordForReply,
     onChanged: (value) {
       ReplyGrpc.replyRegExp = value;
@@ -134,7 +167,7 @@ List<SettingsModel> get replySettings => [
     },
   ),
   getListUidWithNameModel(
-    title: '屏蔽用户',
+    title: '评论屏蔽用户',
     getUidsMap: () => Pref.replyBlockedMids,
     setUidsMap: (mids) {
       Pref.replyBlockedMids = mids;
@@ -143,7 +176,7 @@ List<SettingsModel> get replySettings => [
     onUpdate: () {},
   ),
   getListUidWithNameModel(
-    title: '白名单用户',
+    title: '评论白名单用户',
     leading: const Icon(Icons.person_add_alt_1_outlined),
     emptySubtitle: '点击添加白名单用户',
     countSubtitleBuilder: (count) => '已加入白名单 $count 个用户',
@@ -151,39 +184,7 @@ List<SettingsModel> get replySettings => [
     setUidsMap: UserWhitelist.save,
     onUpdate: () {},
   ),
-  SwitchModel(
-    title: '评论区搜索关键词',
-    subtitle: '展示评论区搜索关键词',
-    leading: const Icon(Icons.search_outlined),
-    setKey: SettingBoxKey.enableWordRe,
-    defaultVal: false,
-    onChanged: (value) => ReplyItemGrpc.enableWordRe = value,
-  ),
-  const SwitchModel(
-    title: '默认展示评论区',
-    subtitle: '在视频详情页默认切换至评论区页（仅Tab型布局）',
-    leading: Icon(Icons.mode_comment_outlined),
-    setKey: SettingBoxKey.defaultShowComment,
-    defaultVal: false,
-  ),
-  PopupModel(
-    title: '评论展示',
-    leading: const Icon(Icons.whatshot_outlined),
-    value: () => Pref.replySortType,
-    items: ReplySortType.values.take(2),
-    onSelected: (value, setState) => GStorage.setting
-        .put(SettingBoxKey.replySortType, value.index)
-        .whenComplete(setState),
-  ),
-  PopupModel(
-    title: '楼中楼评论展示',
-    leading: const Icon(Icons.subdirectory_arrow_right_outlined),
-    value: () => Pref.reply2SortType,
-    items: ReplySortType.values.take(2),
-    onSelected: (value, setState) => GStorage.setting
-        .put(SettingBoxKey.reply2SortType, value.index)
-        .whenComplete(setState),
-  ),
+
 ];
 
 void _showReplyLengthDialog(BuildContext context, VoidCallback setState) {
