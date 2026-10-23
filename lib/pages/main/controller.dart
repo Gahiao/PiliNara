@@ -24,7 +24,7 @@ import 'package:collection/collection.dart';
 import 'package:easy_debounce/easy_throttle.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:PiliPlus/utils/clipboardBV.dart'
+import 'package:PiliPlus/utils/clipboardBV.dart';
 
 class MainController extends GetxController
     with GetSingleTickerProviderStateMixin, AccountMixin, WidgetsBindingObserver {
