@@ -37,6 +37,7 @@ import 'package:get/get.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:material_ui/material_ui.dart' hide RefreshIndicator;
 import 'package:PiliPlus/pages/setting/widgets/bv_jump_dialog.dart';
+import 'package:PiliPlus/pages/setting/widgets/portraitSlideDialog.dart';
 
 import '../../../utils/storage_key.dart';
 import 'model.dart';
