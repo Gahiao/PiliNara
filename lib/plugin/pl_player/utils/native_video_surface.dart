@@ -128,7 +128,7 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
         final wid = (args['wid'] as num?)?.toInt() ?? 0;
         if (wid == 0) return null;
         _surfaceWid = wid;
-        _attachWithNativeSize(
+        _attachOrResize(
           (args['width'] as num?)?.toInt() ?? 0,
           (args['height'] as num?)?.toInt() ?? 0,
         );
@@ -138,12 +138,10 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
         _attached = false;
         widget.controller.detachNativeSurface(_owner);
         break;
-      // 布局尺寸变化不需要转给 mpv：mpv 的渲染尺寸按视频编码尺寸设置，
-      // 控件缩放/旋转只影响合成，不重建视频输出。但 surfaceCreated 时尺寸
-      // 可能还是 0，这里补一次真正的布局尺寸作为临时渲染尺寸。
+      // 布局尺寸变化（全屏/旋转/小窗拖动）：同步给 mpv 的
+      // `android-surface-size`，控制器内部做了防抖。
       case 'surfaceChanged':
-        if (_attached) break;
-        _attachWithNativeSize(
+        _attachOrResize(
           (args['width'] as num?)?.toInt() ?? 0,
           (args['height'] as num?)?.toInt() ?? 0,
         );
@@ -152,34 +150,25 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
     return null;
   }
 
-  /// 用 SurfaceView 的布局尺寸挂载 wid。
-  ///
-  /// 视频参数可能还没到（Surface 需要先有 wid，mpv 才会初始化视频链），
-  /// 这时先用布局尺寸作为临时渲染尺寸，拿到编码尺寸后再由控制器更新。
-  void _attachWithNativeSize(int nativeWidth, int nativeHeight) {
+  /// 挂载 wid（首次）或更新 SurfaceView 布局尺寸。
+  void _attachOrResize(int nativeWidth, int nativeHeight) {
     final wid = _surfaceWid;
     if (wid == null || nativeWidth <= 1 || nativeHeight <= 1) return;
-    final rect = widget.controller.videoController?.rect.value;
-    final int renderWidth;
-    final int renderHeight;
-    final bool provisional;
-    if (rect != null && rect.width > 1 && rect.height > 1) {
-      renderWidth = rect.width.round();
-      renderHeight = rect.height.round();
-      provisional = false;
+    if (!_attached) {
+      widget.controller.attachNativeSurface(
+        _owner,
+        wid,
+        nativeWidth,
+        nativeHeight,
+      );
+      _attached = true;
     } else {
-      renderWidth = nativeWidth;
-      renderHeight = nativeHeight;
-      provisional = true;
+      widget.controller.resizeNativeSurface(
+        _owner,
+        nativeWidth,
+        nativeHeight,
+      );
     }
-    widget.controller.attachNativeSurface(
-      _owner,
-      wid,
-      renderWidth,
-      renderHeight,
-      provisional: provisional,
-    );
-    _attached = true;
   }
 
   void _sync() {

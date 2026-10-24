@@ -10,9 +10,14 @@ class MiniScaffold extends StatefulWidget {
   const MiniScaffold({
     super.key,
     required this.body,
+    this.backgroundColor,
   });
 
   final Widget body;
+
+  /// 可选的不透明底色。视频页把页面 Material 设为透明后，非视频区域需要它
+  /// 来提供主题背景，否则会直接看到窗口黑色。
+  final Color? backgroundColor;
 
   static MiniScaffoldState of(BuildContext context) {
     return context.findAncestorStateOfType<MiniScaffoldState>()!;
@@ -169,9 +174,18 @@ class MiniScaffoldState extends State<MiniScaffold>
 
   @override
   Widget build(BuildContext context) {
-    return BottomSheetLayout(
+    final content = BottomSheetLayout(
       body: widget.body,
       bottomSheet: _currentBottomSheet?.widget,
+    );
+    final backgroundColor = widget.backgroundColor;
+    if (backgroundColor == null) {
+      return content;
+    }
+    return Material(
+      type: MaterialType.canvas,
+      color: backgroundColor,
+      child: content,
     );
   }
 }

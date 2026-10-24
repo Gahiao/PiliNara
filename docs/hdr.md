@@ -52,8 +52,9 @@ Flutter 的 `Texture` 固定是 **RGBA8888**，HDR 元数据在这一步必然�
    一次性按最终矩形添加，不存在「先 1×1 再跳位」的黑闪；
 2. `setRect`：页面滚动、全屏/半屏、旋转、小窗拖动时逐帧只更新布局；
 3. `surfaceCreated`：把 `android.view.Surface` 的 global ref（`wid`）回传 Dart；
-4. `setHdr`：**只有真 HDR 片源真正开始播放时**才请求窗口 `COLOR_MODE_HDR`，
-   避免 SDR 播放或页面进入动画期间触发显示模式切换（这是「打开视频闪一下」的主要来源）；
+4. 不再主动调用 `window.setColorMode(COLOR_MODE_HDR)`：该调用会让整块屏幕切换到
+   HDR 显示模式，部分设备表现为「突然高亮一下」，且画面未就绪时会一直停在亮屏黑画面。
+   HDR 由 MediaCodec 输出 buffer 的 dataspace 交给系统处理（原生 `setHdr` 通道保留但不再使用）；
 5. `remove`：延迟 400ms 销毁。页面 ↔ 小窗切换时新旧控件会短暂共存，
    立即销毁会导致 Surface 重建、mpv 重新初始化 → 黑闪；
 6. `capture`：用 `PixelCopy` 抓当前画面，供 HDR 直通时截图。
@@ -66,9 +67,22 @@ Dart 侧 `lib/plugin/pl_player/utils/native_video_surface.dart`：
 * 用自增的 `owner` 令牌交接页面/小窗两个控件，过期调用会被原生与控制器同时忽略；
 * 只有拿到有效视频尺寸（`VideoController.rect`）后才 `create`，保证首帧尺寸正确。
 
-`--android-surface-size` 使用**视频编码尺寸**（`VideoController.rect`），不是控件显示
-尺寸：缩放/旋转/SurfaceView 布局变化只影响合成，不重建解码器。这是避免小窗动画期间
-反复黑闪的关键。
+`--android-surface-size` 使用 **SurfaceView 的实际布局尺寸**（与旧的 hybrid 出画路径
+一致），不是视频编码尺寸。部分设备/解码器在 `android-surface-size` 与 SurfaceView
+布局不一致时会直接黑屏（例如把 3840×2160 写到一个 1080×607 的 Surface 上）。
+布局尺寸变化做了 200ms 防抖，小窗拖动/全屏动画期间不会逐帧重建视频输出。
+
+### 页面背景必须透明
+
+Flutter 的页面背景、视频 header 的黑色底、以及 `MiniScaffold`/简介面板等任何不透明
+绘制都会盖住底层的 SurfaceView（它位于整个 Flutter surface 之下）。因此视频页：
+
+* `SimpleScaffold` 的 Material 改为透明，视频 header 的黑底移除；
+* 非视频区域（简介/评论/侧栏/小窗）显式加回主题表面色背景；
+* 全屏/横屏/竖屏/近似方形布局都已覆盖。
+
+这是「HDR 已出画但画面全黑」的直接原因：原生视频在 Flutter 之下，之前被页面黑底/
+Material 背景盖住了。
 
 ## 四、mpv 参数（HDR 路径）
 

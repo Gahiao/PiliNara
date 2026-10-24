@@ -1318,6 +1318,9 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
       () {
         final isFullScreen = this.isFullScreen;
         return SimpleScaffold(
+          // 原生 HDR 视频在 Flutter 之下；页面背景必须透明，视频区域才能透出。
+          // 非视频区域的背景由 header 的黑色窗口底 + 下方 _surface() 负责。
+          backgroundColor: Colors.transparent,
           appBar: removeAppBar(isFullScreen)
               ? null
               : Obx(
@@ -1411,12 +1414,11 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
                       SizedBox(
                         width: maxWidth,
                         height: height,
-                        child: DecoratedBox(
-                          decoration: const BoxDecoration(color: Colors.black),
-                          child: videoPlayer(
-                            width: maxWidth,
-                            height: height,
-                          ),
+                        // 原生 HDR 视频由 Flutter 之下的 SurfaceView 输出，
+                        // 这里不能再用不透明底色盖住它；SDR 纹理由播放器自己填充。
+                        child: videoPlayer(
+                          width: maxWidth,
+                          height: height,
                         ),
                       ),
                       _buildHeaderOverlay(),
@@ -1427,6 +1429,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
             },
             body: MiniScaffold(
               key: _ownedKey(videoDetailController.childKey),
+              backgroundColor: colorScheme.surface,
               body: Column(
                 children: [
                   buildTabBar(onTap: videoDetailController.animToTop),
@@ -1609,6 +1612,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     () {
       final isFullScreen = this.isFullScreen;
       return SimpleScaffold(
+        backgroundColor: Colors.transparent,
         appBar: removeAppBar(isFullScreen)
             ? null
             : SimpleAppBar(
@@ -1648,6 +1652,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
             height: maxHeight - padding.top,
             child: MiniScaffold(
               key: _ownedKey(videoDetailController.childKey),
+              backgroundColor: colorScheme.surface,
               body: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1715,6 +1720,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
                   height: introHeight,
                   child: MiniScaffold(
                     key: _ownedKey(videoDetailController.childKey),
+                    backgroundColor: colorScheme.surface,
                     body: Column(
                       children: [
                         buildTabBar(showIntro: false),
@@ -1812,6 +1818,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
             height: maxHeight - padding.top,
             child: MiniScaffold(
               key: _ownedKey(videoDetailController.childKey),
+              backgroundColor: colorScheme.surface,
               body: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1861,6 +1868,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   Widget get childWhenDisabledAlmostSquare => Obx(() {
     final isFullScreen = this.isFullScreen;
     return SimpleScaffold(
+      backgroundColor: Colors.transparent,
       appBar: removeAppBar(isFullScreen)
           ? null
           : SimpleAppBar(
@@ -1917,6 +1925,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
             height: bottomHeight,
             child: MiniScaffold(
               key: _ownedKey(videoDetailController.childKey),
+              backgroundColor: colorScheme.surface,
               body: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2563,6 +2572,18 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     );
   }
 
+  /// 给视频页非视频区域（简介/评论/侧栏）提供不透明底色。
+  ///
+  /// 页面 Material 设为透明后，只有视频区域能透出底层原生 SurfaceView；
+  /// 其余内容必须有明确背景，否则会直接看到窗口黑色。
+  Widget _surface(Widget child) {
+    return Material(
+      type: MaterialType.canvas,
+      color: colorScheme.surface,
+      child: child,
+    );
+  }
+
   Widget videoIntro({
     double? width,
     double? height,
@@ -2571,7 +2592,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     bool needCtr = true,
   }) {
     if (videoDetailController.isFileSource) {
-      return localIntroPanel(needCtr: needCtr);
+      return _surface(localIntroPanel(needCtr: needCtr));
     }
     Widget child = CustomScrollView(
       key: const PageStorageKey(CommonIntroController),
@@ -2668,7 +2689,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         ),
       );
     }
-    return KeepAliveWrapper(child: child);
+    return KeepAliveWrapper(child: _surface(child));
   }
 
   Widget get seasonPanel {

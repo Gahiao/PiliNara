@@ -1074,7 +1074,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       '出画路径: ${native ? 'SurfaceView(HDR)' : 'Texture(8bit)'}',
       if (native)
         '原生 Surface: wid=${_nativeWid ?? '-'}，'
-            '渲染尺寸=${_nativeRenderSize == null ? '-' : '${_nativeRenderSize!.$1}x${_nativeRenderSize!.$2}'}',
+            'SurfaceView 尺寸=${_nativeSurfaceSize == null ? '-' : '${_nativeSurfaceSize!.$1}x${_nativeSurfaceSize!.$2}'}',
       'vo: ${read('vo')}',
       'vo-configured: ${read('vo-configured')}',
       'hwdec-current: ${read('hwdec-current')}',
@@ -1123,23 +1123,19 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 原生 Surface 的 global ref，作为 mpv 的 `--wid`。
   int? _nativeWid;
 
-  /// mpv 的渲染尺寸：视频编码尺寸（不是控件显示尺寸）。
+  /// SurfaceView 在窗口中的实际像素尺寸。
   ///
-  /// 控件缩放/旋转只影响 SurfaceView 的合成，不需要重建 mpv 视频输出；
-  /// 否则每次小窗动画都会重建解码器，画面会不停黑闪。
-  (int, int)? _nativeRenderSize;
+  /// `--android-surface-size` 必须与 SurfaceView 的布局尺寸一致（与旧的
+  /// hybrid 出画路径一致）；视频编码尺寸（如 3840x2160）由解码器自己决定，
+  /// 拿它去设置 Surface 会让部分设备黑屏。
+  (int, int)? _nativeSurfaceSize;
 
   int? _appliedWid;
   String? _appliedVo;
-  (int, int)? _appliedRenderSize;
+  (int, int)? _appliedSurfaceSize;
 
-  /// 是否用 SurfaceView 布局尺寸做过一次临时渲染尺寸（视频参数还没到）。
-  bool _nativeRenderSizeProvisional = false;
-
-  /// 是否已经请求过窗口 HDR 色彩模式（每次 Surface 挂载后重置）。
-  bool _hdrColorModeRequested = false;
-
-  ValueNotifier<ui.Rect?>? _nativeRectNotifier;
+  /// 布局尺寸变化的防抖更新（小窗拖动/页面动画期间尺寸逐帧变化）。
+  Timer? _nativeResizeTimer;
 
   /// 延迟解除绑定：页面 ↔ 小窗切换时新旧控件会短暂共存。
   Timer? _nativeDetachTimer;
@@ -1153,34 +1149,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   void _setVideoController(VideoController? value) {
     if (identical(_videoController, value)) return;
-    _nativeRectNotifier?.removeListener(_onNativeRectChanged);
-    _nativeRectNotifier = null;
     _videoController = value;
     videoOutput.value = value;
-    if (value != null) {
-      _nativeRectNotifier = value.rect;
-      value.rect.addListener(_onNativeRectChanged);
-      _onNativeRectChanged();
-    }
-  }
-
-  void _onNativeRectChanged() {
-    final rect = _videoController?.rect.value;
-    if (rect == null || rect.width <= 1 || rect.height <= 1) return;
-    final size = (rect.width.round(), rect.height.round());
-    if (_nativeRenderSize == size && !_nativeRenderSizeProvisional) return;
-    _nativeRenderSize = size;
-    if (_nativeWid != null) {
-      if (_nativeRenderSizeProvisional) {
-        // 之前用 SurfaceView 布局尺寸临时初始化过 vo，拿到真正的视频尺寸后
-        // 强制重下一次 vo，确保解码/送显使用正确的几何（此时通常还未出画）。
-        _nativeRenderSizeProvisional = false;
-        _appliedVo = null;
-        _appliedRenderSize = null;
-      }
-      _applyNativeSurface();
-      _completeNativeSurfaceReady();
-    }
   }
 
   bool _isStaleNativeOwner(int owner) {
@@ -1188,50 +1158,48 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     return current != null && owner < current;
   }
 
-  /// 原生 SurfaceView 就绪后，把 `wid` / 渲染尺寸交给 mpv。
-  void attachNativeSurface(
-    int owner,
-    int wid,
-    int width,
-    int height, {
-    bool provisional = false,
-  }) {
+  /// 原生 SurfaceView 就绪后，把 `wid` / SurfaceView 尺寸交给 mpv。
+  void attachNativeSurface(int owner, int wid, int width, int height) {
     if (wid == 0 || _isStaleNativeOwner(owner)) return;
     _nativeDetachTimer?.cancel();
     _nativeDetachTimer = null;
     _nativeOwner = owner;
     _nativeWid = wid;
-    _hdrColorModeRequested = false;
     if (width > 1 && height > 1) {
-      _nativeRenderSize = (width, height);
+      _nativeSurfaceSize = (width, height);
     }
-    _nativeRenderSizeProvisional = provisional;
     // 播放器还没创建完时先记下来，_initPlayer 会在 VideoController 初始化
     // 完成后补一次，避免刚设置的 vo 被 media_kit 的初始化覆盖成 null。
     if (_videoPlayerController != null) {
       _applyNativeSurface();
-      // 临时渲染尺寸只是为了让 mpv 先初始化视频链；真正的视频尺寸到了
-      // 再放行自动播放，避免首帧按 16:9 占位尺寸出画后跳一下。
-      if (!provisional) {
-        _completeNativeSurfaceReady();
-      }
-      if (_videoPlayerController!.state.playing) {
-        _requestNativeHdrColorMode();
-      }
+      _completeNativeSurfaceReady();
     }
   }
 
-  /// 真正的 HDR 播放开始时才请求窗口 HDR 色彩模式。
+  /// 更新 SurfaceView 的布局尺寸。
   ///
-  /// 延迟到这一时刻有两个好处：
-  /// * 避免页面进入动画期间就切换显示模式（表现为整屏闪一下）；
-  /// * 只有真的开始播放 HDR 片源才切换，暂停/加载阶段保持原样。
-  void _requestNativeHdrColorMode() {
-    if (!nativeSurfaceMode.value || !isHdrSource) return;
-    final owner = _nativeOwner;
-    if (owner == null || _hdrColorModeRequested) return;
-    _hdrColorModeRequested = true;
-    unawaited(NativeVideoSurfaceChannel.setHdr(owner: owner, hdr: true));
+  /// 防抖 200ms：小窗拖动/全屏动画期间尺寸逐帧变化，逐帧改
+  /// `--android-surface-size` 会让视频输出反复重建（黑闪）。
+  void resizeNativeSurface(int owner, int width, int height) {
+    if (owner != _nativeOwner) return;
+    if (width <= 1 || height <= 1) return;
+    final size = (width, height);
+    if (_nativeSurfaceSize == size) return;
+    _nativeSurfaceSize = size;
+    if (_videoPlayerController == null || _nativeWid == null) return;
+    _nativeResizeTimer?.cancel();
+    _nativeResizeTimer = Timer(const Duration(milliseconds: 200), () {
+      _nativeResizeTimer = null;
+      if (_nativeWid == null) return;
+      final player = _videoPlayerController;
+      final size = _nativeSurfaceSize;
+      if (player == null || size == null) return;
+      if (_appliedSurfaceSize == size) return;
+      try {
+        player.setProperty('android-surface-size', '${size.$1}x${size.$2}');
+        _appliedSurfaceSize = size;
+      } catch (_) {}
+    });
   }
 
   /// 原生 Surface 被销毁（切后台、窗口重建等）时解除绑定。
@@ -1247,12 +1215,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (_nativeOwner != owner) return;
       // 期间播放器被换掉（切视频/切画质）时不要再动新播放器。
       if (!identical(_videoPlayerController, ownerPlayer)) return;
+      _nativeResizeTimer?.cancel();
+      _nativeResizeTimer = null;
       _nativeOwner = null;
       _nativeWid = null;
       _appliedWid = null;
       _appliedVo = null;
-      _appliedRenderSize = null;
-      _nativeRenderSizeProvisional = false;
+      _appliedSurfaceSize = null;
       final player = ownerPlayer;
       if (player == null) return;
       try {
@@ -1265,15 +1234,15 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   void _applyNativeSurface({Player? target}) {
     final player = target ?? _videoPlayerController;
     final wid = _nativeWid;
-    final size = _nativeRenderSize;
+    final size = _nativeSurfaceSize;
     if (player == null || wid == null || size == null) return;
     if (size.$1 <= 1 || size.$2 <= 1) return;
     final vo = Pref.hdrBackend;
     final needVo = _appliedWid != wid || _appliedVo != vo;
     try {
-      if (_appliedRenderSize != size) {
+      if (_appliedSurfaceSize != size) {
         player.setProperty('android-surface-size', '${size.$1}x${size.$2}');
-        _appliedRenderSize = size;
+        _appliedSurfaceSize = size;
       }
       if (needVo) {
         // 顺序很重要：先复位 vo，再给 wid，最后设置 vo。
@@ -1285,23 +1254,25 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         _appliedVo = vo;
         _applyHdrProperties(player, hdrSurface: true);
       }
-      debugPrint(
-        '[HDR] nativeSurface vo=$vo wid=$wid ${size.$1}x${size.$2}',
-      );
+      debugPrint([
+        '[HDR] nativeSurface vo=$vo',
+        'wid=$wid',
+        'surface=${size.$1}x${size.$2}',
+      ].join(' '));
     } catch (_) {}
   }
 
   void _resetNativeSurfaceState() {
     _nativeDetachTimer?.cancel();
     _nativeDetachTimer = null;
+    _nativeResizeTimer?.cancel();
+    _nativeResizeTimer = null;
     _nativeOwner = null;
     _nativeWid = null;
-    _nativeRenderSize = null;
+    _nativeSurfaceSize = null;
     _appliedWid = null;
     _appliedVo = null;
-    _appliedRenderSize = null;
-    _nativeRenderSizeProvisional = false;
-    _hdrColorModeRequested = false;
+    _appliedSurfaceSize = null;
     _nativeSurfaceReady = null;
   }
 
@@ -1645,11 +1616,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (_nativeWid != null) {
       _appliedWid = null;
       _appliedVo = null;
-      _appliedRenderSize = null;
+      _appliedSurfaceSize = null;
       _applyNativeSurface(target: player);
-      if (!_nativeRenderSizeProvisional) {
-        _completeNativeSurfaceReady();
-      }
+      _completeNativeSurfaceReady();
     }
 
     player.setMediaHeader(userAgent: BrowserUa.pc, referer: HttpString.baseUrl);
@@ -1866,7 +1835,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           _stopWakeLockTimer();
           _updatePlaybackState();
           WakelockPlus.enable();
-          _requestNativeHdrColorMode();
 
           if (_isAutoEnterPip &&
               _autoAudioState != AutoAudioOnlyState.autoAudioOnly) {
