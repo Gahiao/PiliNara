@@ -1815,7 +1815,7 @@ abstract final class Pref {
 
   static String get bvJumpToastText =>
       _setting.get(SettingBoxKey.bvJumpToastText,
-      defaultValue: "已到达对应坐标~");
+      defaultValue: "已到坐标~");
 
   static set bvJumpToastText(String value) =>
       _setting.put(SettingBoxKey.bvJumpToastText, value);

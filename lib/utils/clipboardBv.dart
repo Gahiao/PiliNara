@@ -44,7 +44,7 @@ abstract final class ClipboardBv {
       if (Pref.showBvToast) {
         final text = Pref.bvJumpToastText;
         SmartDialog.showToast(
-          text.isEmpty? "已到达对应坐标~":
+          text.isEmpty? "已到坐标~":
               text.replaceAll('{bvid}',
               _bvPattern.firstMatch(url)?.group(0) ?? '',)
 

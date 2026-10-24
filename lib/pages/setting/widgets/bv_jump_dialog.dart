@@ -5,7 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/services.dart';
 
-const String kToastTextDefault = '已到达对应坐标~';
+const String kToastTextDefault = '已到坐标~';
 const kWaitSecDefault = 5;
 
 Future<void> showBvSwitchDialog(BuildContext context) {
