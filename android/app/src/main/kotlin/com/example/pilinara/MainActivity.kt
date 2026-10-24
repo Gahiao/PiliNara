@@ -87,6 +87,10 @@ class MainActivity : AudioServiceActivity() {
                     owner = intArg("owner"),
                     result = result,
                 )
+                "probe" -> host.probe(
+                    owner = intArg("owner"),
+                    result = result,
+                )
                 else -> result.notImplemented()
             }
         }

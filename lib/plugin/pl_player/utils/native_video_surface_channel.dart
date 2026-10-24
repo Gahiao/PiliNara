@@ -64,4 +64,10 @@ abstract final class NativeVideoSurfaceChannel {
   /// `vo=mediacodec_embed` 时画面不经过 mpv，`Player.screenshot()` 拿不到帧。
   static Future<Uint8List?> capture({required int owner}) =>
       channel.invokeMethod<Uint8List>('capture', {'owner': owner});
+
+  /// 采样 SurfaceView 画面，返回 0-255 的最大亮度。
+  ///
+  /// 返回 0 表示 Surface 本身是黑的（解码器没出画），与 Flutter 遮盖无关。
+  static Future<int?> probe({required int owner}) =>
+      channel.invokeMethod<int>('probe', {'owner': owner});
 }

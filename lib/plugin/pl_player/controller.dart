@@ -1140,6 +1140,17 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 延迟解除绑定：页面 ↔ 小窗切换时新旧控件会短暂共存。
   Timer? _nativeDetachTimer;
 
+  /// HDR 直通画面自检（播放几秒后采样一次，区分解码器黑屏和 Flutter 遮盖）。
+  Timer? _nativeProbeTimer;
+
+  /// 原生视频当前在屏幕上的矩形（逻辑像素，全局坐标）。
+  ///
+  /// 播放页根节点用它挖出唯一的透明区域；其余区域由根节点显式铺黑，
+  /// 不再依赖整页透明或窗口背景。
+  final ValueNotifier<ui.Rect?> nativeContentRect = ValueNotifier<ui.Rect?>(
+    null,
+  );
+
   /// 原生 Surface 就绪信号：自动播放前等待它，避免「先出声音、黑屏几秒」。
   Completer<void>? _nativeSurfaceReady;
 
@@ -1173,7 +1184,33 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (_videoPlayerController != null) {
       _applyNativeSurface();
       _completeNativeSurfaceReady();
+      if (_videoPlayerController!.state.playing) {
+        _scheduleNativeProbe();
+      }
     }
+  }
+
+  /// 播放开始后采样一次 SurfaceView 画面。
+  ///
+  /// PixelCopy 读取的是原生 Surface 自身的内容，不受 Flutter 是否遮盖影响：
+  /// 返回 0 说明解码器没有出画（换后端/开启杜比兼容），返回非 0 但仍看不到
+  /// 画面则说明是 Flutter 层把视频盖住了。
+  void _scheduleNativeProbe() {
+    if (!nativeSurfaceMode.value || !isHdrSource) return;
+    _nativeProbeTimer?.cancel();
+    _nativeProbeTimer = Timer(const Duration(seconds: 4), () async {
+      _nativeProbeTimer = null;
+      final owner = _nativeOwner;
+      if (owner == null || !nativeSurfaceMode.value) return;
+      final maxLuma = await NativeVideoSurfaceChannel.probe(owner: owner);
+      if (maxLuma == null || maxLuma > 1) return;
+      if (!nativeSurfaceMode.value || _instance == null) return;
+      SmartDialog.showToast(
+        'HDR 直通出画未检测到画面：可能是当前解码器不支持此片源。'
+        '可尝试开启「杜比视界兼容模式」或关闭「HDR 直通出画」后重开视频',
+        displayTime: const Duration(seconds: 5),
+      );
+    });
   }
 
   /// 更新 SurfaceView 的布局尺寸。
@@ -1267,12 +1304,15 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _nativeDetachTimer = null;
     _nativeResizeTimer?.cancel();
     _nativeResizeTimer = null;
+    _nativeProbeTimer?.cancel();
+    _nativeProbeTimer = null;
     _nativeOwner = null;
     _nativeWid = null;
     _nativeSurfaceSize = null;
     _appliedWid = null;
     _appliedVo = null;
     _appliedSurfaceSize = null;
+    nativeContentRect.value = null;
     _nativeSurfaceReady = null;
   }
 
@@ -1835,6 +1875,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           _stopWakeLockTimer();
           _updatePlaybackState();
           WakelockPlus.enable();
+          _scheduleNativeProbe();
 
           if (_isAutoEnterPip &&
               _autoAudioState != AutoAudioOnlyState.autoAudioOnly) {

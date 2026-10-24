@@ -183,6 +183,9 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
     final bounds = _globalBounds(box);
     if (bounds == null) return;
 
+    // 通知播放页根节点：只有这个矩形可以透出底层原生画面。
+    widget.controller.nativeContentRect.value = bounds;
+
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final left = (bounds.left * dpr).round();
     final top = (bounds.top * dpr).round();

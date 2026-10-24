@@ -53,6 +53,7 @@ import 'package:PiliPlus/pages/video/reply/controller.dart';
 import 'package:PiliPlus/pages/video/reply/view.dart';
 import 'package:PiliPlus/pages/video/widgets/keyboard_scrollable.dart';
 import 'package:PiliPlus/pages/video/view_point/view.dart';
+import 'package:PiliPlus/pages/video/widgets/hdr_hole_punch.dart';
 import 'package:PiliPlus/pages/video/widgets/header_control.dart';
 import 'package:PiliPlus/pages/video/widgets/intro_layout.dart';
 import 'package:PiliPlus/pages/video/widgets/player_focus.dart';
@@ -2186,7 +2187,13 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         ? Theme(data: theme, child: child)
         : child;
     // 页面根参照系：归位目标矩形以此量取（规避路由转场期间的整页偏移）
-    return KeyedSubtree(key: _pageRootKey, child: page);
+    return KeyedSubtree(
+      key: _pageRootKey,
+      child: HdrHolePunch(
+        controller: plPlayerController!,
+        child: page,
+      ),
+    );
   }
 
   /// 包住 tab 内容区：方向键滚动当前激活 tab 的内容。

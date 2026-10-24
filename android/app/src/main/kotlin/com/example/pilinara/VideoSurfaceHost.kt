@@ -3,6 +3,7 @@ package com.example.pilinara
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
@@ -205,6 +206,75 @@ class VideoSurfaceHost(
             }
         } catch (t: Throwable) {
             Log.w(TAG, "capture: PixelCopy unavailable", t)
+            result.success(null)
+        }
+    }
+
+    /**
+     * 采样 SurfaceView 当前画面，返回 0-255 的最大亮度分量。
+     *
+     * 用于区分「解码器没有出画」和「Flutter 层把画面盖住」：
+     * 返回 0 说明 Surface 本身是黑的，与 Flutter 无关。
+     */
+    fun probe(owner: Int, result: MethodChannel.Result) {
+        val sv = surfaceView
+        if (owner != ownerId || sv == null || sv.width <= 1 || sv.height <= 1) {
+            result.success(null)
+            return
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            result.success(null)
+            return
+        }
+        val bitmap = try {
+            Bitmap.createBitmap(sv.width, sv.height, Bitmap.Config.ARGB_8888)
+        } catch (t: Throwable) {
+            Log.w(TAG, "probe: unable to allocate bitmap", t)
+            result.success(null)
+            return
+        }
+        val listener = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
+            if (copyResult != PixelCopy.SUCCESS) {
+                Log.w(TAG, "probe: PixelCopy failed with $copyResult")
+                bitmap.recycle()
+                mainHandler.post { result.success(null) }
+            } else {
+                Thread {
+                    val maxLuma = runCatching {
+                        var maxValue = 0
+                        val stepX = maxOf(1, bitmap.width / 32)
+                        val stepY = maxOf(1, bitmap.height / 18)
+                        var y = 0
+                        while (y < bitmap.height) {
+                            var x = 0
+                            while (x < bitmap.width) {
+                                val pixel = bitmap.getPixel(x, y)
+                                val value = maxOf(
+                                    Color.red(pixel),
+                                    Color.green(pixel),
+                                    Color.blue(pixel),
+                                )
+                                if (value > maxValue) maxValue = value
+                                x += stepX
+                            }
+                            y += stepY
+                        }
+                        maxValue
+                    }.getOrNull()
+                    bitmap.recycle()
+                    mainHandler.post { result.success(maxLuma) }
+                }.apply { isDaemon = true }.start()
+            }
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PixelCopy.request(sv, bitmap, listener, mainHandler)
+            } else {
+                PixelCopy.request(sv.holder.surface, bitmap, listener, mainHandler)
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "probe: PixelCopy unavailable", t)
+            bitmap.recycle()
             result.success(null)
         }
     }
