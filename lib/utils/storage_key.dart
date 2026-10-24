@@ -345,6 +345,7 @@ abstract final class SettingBoxKey {
       showBvToast = 'showBvToast',
       jumpDirec = 'jumpDirec',
       bvJumpToastText = 'bvJumpToastText',
+      bvJumpWaitSec = 'bvJumpWaitSec',
       shouldJumpEveryTime = 'shouldJumpEveryTime';
   static const String portraitSlideVideo = 'portraitSlideVideo',
       portraitRC = 'portraitRC',

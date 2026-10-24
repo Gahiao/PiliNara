@@ -33,7 +33,7 @@ abstract final class ClipboardBv {
     if (Pref.jumpDirec) {
       await _openUrl(target);
     }else{
-        final ok = await showActionToast(msg: '是否跳转到来自剪切板的视频?', actionText: '跳转');
+        final ok = await showActionToast(msg: '是否跳转到来自剪切板的视频?', actionText: '跳转', sec: Pref.bvJumpWaitSec);
         if (ok) await _openUrl(target);
     }
   }

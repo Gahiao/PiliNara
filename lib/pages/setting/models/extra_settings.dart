@@ -93,31 +93,33 @@ List<SettingsModel> get extraSettings => [
     getSubtitle: () => '配置 OpenAI 兼容 API 和提示词模板',
     onTap: (context, _) => Get.toNamed('/aiSetting'),
   ),
-  const SplitModel(
-    normalModel: NormalModel.split(
-      title: "BV跳转",
-      subtitle: "检测剪切板中的BV号并自动跳转",
-      leading: Icon(MdiIcons.motionPlayOutline),
+  if (Platform.isAndroid) ...[
+    const SplitModel(
+      normalModel: NormalModel.split(
+        title: "BV跳转",
+        subtitle: "检测剪切板中的BV号并自动跳转",
+        leading: Icon(MdiIcons.motionPlayOutline),
+      ),
+      switchModel: SwitchModel.split(
+        setKey: SettingBoxKey.bvJump,
+        defaultVal: false,
+        onTap: showBvSwitchDialog,
+      ),
     ),
-    switchModel: SwitchModel.split(
-      setKey: SettingBoxKey.bvJump,
-      defaultVal: false,
-      onTap: showBvSwitchDialog,
-    ),
-  ),
 
-  const SplitModel(
-    normalModel: NormalModel.split(
-      title: '竖屏即刷',
-      subtitle: '允许竖屏视频上下滑动刷视频',
-      leading: Icon(Icons.height),
+    const SplitModel(
+      normalModel: NormalModel.split(
+        title: '竖屏即刷',
+        subtitle: '允许竖屏视频上下滑动刷视频',
+        leading: Icon(Icons.height),
+      ),
+      switchModel: SwitchModel.split(
+        setKey: SettingBoxKey.portraitSlideVideo,
+        defaultVal: false,
+        onTap: portraitSlideDialog,
+      ),
     ),
-    switchModel: SwitchModel.split(
-      setKey: SettingBoxKey.portraitSlideVideo,
-      defaultVal: false,
-      onTap: portraitSlideDialog,
-    ),
-  ),
+  ],
   const SwitchModel(
     title: '禁用 SSL 证书验证',
     subtitle: '谨慎开启，禁用容易受到中间人攻击',

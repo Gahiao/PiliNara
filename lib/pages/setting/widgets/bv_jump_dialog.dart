@@ -1,3 +1,4 @@
+import 'package:PiliPlus/grpc/bilibili/app/im/v1.pb.dart';
 import 'package:PiliPlus/pages/setting/widgets/switch_item.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
@@ -5,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 
 const String kToastTextDefault = '已到达对应坐标~';
+const kWaitSecDefault = 5;
 
 Future<void> showBvSwitchDialog(BuildContext context) async {
   var subtreeKey = UniqueKey();
@@ -14,6 +16,13 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
       SettingBoxKey.bvJumpToastText,
       defaultValue: kToastTextDefault,
     ),
+  );
+
+  final waitSec = TextEditingController(
+    text: GStorage.setting.get(
+      SettingBoxKey.bvJumpWaitSec,
+      defaultValue: kWaitSecDefault,
+    )
   );
 
   final res = await showDialog<String>(
@@ -80,6 +89,25 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
                 ),
               ),
               const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: TextField(
+                  controller: waitSec,
+                  maxLines: 1,
+                  textInputAction: TextInputAction.done,
+                  maxLength: 100,
+                  decoration: const InputDecoration(
+                    labelText: '等待时间',
+                    hintText: '5',
+                    helperText: '应该等待多长时间(s)',
+                    counterText: '',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(6)),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -93,8 +121,13 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
                 SettingBoxKey.bvJumpToastText,
                 kToastTextDefault,
               );
+              await GStorage.setting.put(
+                SettingBoxKey.bvJumpWaitSec,
+                kWaitSecDefault,
+              );
               await GStorage.setting.put(SettingBoxKey.shouldJumpEveryTime, false);
               textController.text = kToastTextDefault;
+              waitSec.text = kWaitSecDefault as String;
               setState(() => subtreeKey = UniqueKey());
             },
             child: const Text('恢复默认'),
