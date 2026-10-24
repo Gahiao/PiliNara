@@ -9,7 +9,9 @@ import 'package:PiliPlus/pages/setting/widgets/cdn_node_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/cdn_select_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/ordered_multi_select_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/select_dialog.dart';
+import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/audio_output_type.dart';
+import 'package:PiliPlus/plugin/pl_player/models/hdr_config.dart';
 import 'package:PiliPlus/plugin/pl_player/models/hwdec_type.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/utils/filtering_text.dart';
@@ -31,6 +33,61 @@ List<SettingsModel> get videoSettings => [
     leading: Icon(Icons.flash_on_outlined),
     setKey: SettingBoxKey.enableHA,
     defaultVal: true,
+  ),
+  SwitchModel(
+    title: 'HDR 支持',
+    subtitle: '为 HDR / HDR Vivid / 杜比视界片源启用色调映射与广色域处理，关闭后保持默认渲染',
+    leading: const Icon(Icons.hdr_on),
+    setKey: SettingBoxKey.enableHdr,
+    defaultVal: true,
+    onChanged: (value) => PlPlayerController.instance?.applyHdrOptions(),
+  ),
+  NormalModel(
+    title: 'HDR 输出模式',
+    leading: const Icon(Icons.hdr_auto),
+    getSubtitle: () {
+      final mode = HdrOutputMode.fromValue(Pref.hdrOutputMode);
+      return '当前：${mode.label}\n${mode.desc}';
+    },
+    onTap: _showHdrOutputModeDialog,
+  ),
+  NormalModel(
+    title: 'HDR 色调映射',
+    leading: const Icon(Icons.gradient_outlined),
+    getSubtitle: () =>
+        '当前：${HdrToneMapping.fromValue(Pref.hdrToneMapping).label}（此项即mpv的--tone-mapping）',
+    onTap: _showHdrToneMappingDialog,
+  ),
+  NormalModel(
+    title: 'HDR 目标峰值亮度',
+    leading: const Icon(Icons.brightness_6_outlined),
+    getSubtitle: () =>
+        '当前：${HdrConfig.targetPeakLabel(Pref.hdrTargetPeak)}。自动时由片源与显示设备能力决定（此项即mpv的--target-peak）',
+    onTap: _showHdrTargetPeakDialog,
+  ),
+  SwitchModel(
+    title: 'HDR 动态峰值检测',
+    subtitle: '逐帧统计画面峰值亮度，高光细节更完整，会增加少量 GPU 开销（此项即mpv的--hdr-compute-peak）',
+    leading: const Icon(Icons.auto_graph),
+    setKey: SettingBoxKey.hdrComputePeak,
+    defaultVal: true,
+    onChanged: (value) => PlPlayerController.instance?.applyHdrOptions(),
+  ),
+  NormalModel(
+    title: 'HDR 解码方式',
+    leading: const Icon(Icons.memory_outlined),
+    getSubtitle: () {
+      final mode = HdrHwdecMode.fromValue(Pref.hdrHwdecMode);
+      return '当前：${mode.label}。${mode.desc}（重新打开视频生效）';
+    },
+    onTap: _showHdrHwdecDialog,
+  ),
+  SwitchModel(
+    title: '杜比视界兼容模式',
+    subtitle: '部分设备无法硬解杜比视界（Dolby Vision）元数据，开启后在存在同分辨率 HDR10 片源时自动改用 HDR10',
+    leading: const Icon(Icons.brightness_high),
+    setKey: SettingBoxKey.dolbyVisionFallback,
+    defaultVal: false,
   ),
   const SwitchModel(
     title: '免登录1080P',
@@ -685,3 +742,93 @@ void _showLiveBufferSecDialog(BuildContext context, VoidCallback setState) =>
       title: '直播缓冲时长',
       suffix: 's',
     );
+
+Future<void> _showHdrOutputModeDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final res = await showDialog<String>(
+    context: context,
+    builder: (context) => SelectDialog<String>(
+      title: 'HDR 输出模式',
+      value: Pref.hdrOutputMode,
+      values: HdrOutputMode.values.map((e) => (e.value, e.label)).toList(),
+      subtitleBuilder: (context, index) => Text(
+        HdrOutputMode.values[index].desc,
+        style: TextTheme.of(context).labelSmall?.copyWith(
+          color: ColorScheme.of(context).outline,
+        ),
+      ),
+    ),
+  );
+  if (res != null) {
+    await GStorage.setting.put(SettingBoxKey.hdrOutputMode, res);
+    PlPlayerController.instance?.applyHdrOptions();
+    setState();
+  }
+}
+
+Future<void> _showHdrToneMappingDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final res = await showDialog<String>(
+    context: context,
+    builder: (context) => SelectDialog<String>(
+      title: 'HDR 色调映射',
+      value: Pref.hdrToneMapping,
+      values: HdrToneMapping.values.map((e) => (e.value, e.label)).toList(),
+    ),
+  );
+  if (res != null) {
+    await GStorage.setting.put(SettingBoxKey.hdrToneMapping, res);
+    PlPlayerController.instance?.applyHdrOptions();
+    setState();
+  }
+}
+
+Future<void> _showHdrTargetPeakDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final res = await showDialog<int>(
+    context: context,
+    builder: (context) => SelectDialog<int>(
+      title: 'HDR 目标峰值亮度',
+      value: Pref.hdrTargetPeak,
+      values: HdrConfig.targetPeakChoices
+          .map((e) => (e, HdrConfig.targetPeakLabel(e)))
+          .toList(),
+    ),
+  );
+  if (res != null) {
+    await GStorage.setting.put(SettingBoxKey.hdrTargetPeak, res);
+    PlPlayerController.instance?.applyHdrOptions();
+    setState();
+  }
+}
+
+Future<void> _showHdrHwdecDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final res = await showDialog<String>(
+    context: context,
+    builder: (context) => SelectDialog<String>(
+      title: 'HDR 解码方式',
+      value: Pref.hdrHwdecMode,
+      values: HdrHwdecMode.values.map((e) => (e.value, e.label)).toList(),
+      subtitleBuilder: (context, index) => Text(
+        HdrHwdecMode.values[index].desc,
+        style: TextTheme.of(context).labelSmall?.copyWith(
+          color: ColorScheme.of(context).outline,
+        ),
+      ),
+    ),
+  );
+  if (res != null) {
+    await GStorage.setting.put(SettingBoxKey.hdrHwdecMode, res);
+    SmartDialog.showToast('重新打开视频后生效');
+    setState();
+  }
+}

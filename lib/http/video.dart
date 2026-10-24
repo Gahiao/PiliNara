@@ -47,6 +47,13 @@ import 'package:protobuf/protobuf.dart';
 
 /// view层根据 status 判断渲染逻辑
 abstract final class VideoHttp {
+  /// 播放地址接口的 `fnval` 位掩码（按位或）：
+  /// 16=DASH、64=HDR、128=4K、256=杜比音频、512=杜比视界、
+  /// 1024=8K、2048=AV1、4096=HDR Vivid。
+  ///
+  /// 旧值 4048 不含 4096，导致 HDR Vivid（画质 129）始终取不到片源。
+  static const int fnvalAll = 8144;
+
   static List<RegExp> zoneRegExp = Pref.compileBanWord(Pref.banWordForZone);
   static bool enableFilter = zoneRegExp.isNotEmpty;
 
@@ -255,8 +262,8 @@ abstract final class VideoHttp {
           'season_id': ?seasonId,
           'cid': cid,
           'qn': qn,
-          // 获取所有格式的视频
-          'fnval': 4048,
+          // 获取所有格式的视频（含 HDR / 杜比视界 / HDR Vivid）
+          'fnval': fnvalAll,
           'fourk': 1,
           'fnver': 0,
           'voice_balance': voiceBalance ? 1 : 0,
@@ -297,7 +304,7 @@ abstract final class VideoHttp {
           "video_param": {"qn": qn},
           "player_param": const {
             "fnver": 0,
-            "fnval": 4048,
+            "fnval": fnvalAll,
             "drm_tech_type": 0,
             "app_id": 100,
           },

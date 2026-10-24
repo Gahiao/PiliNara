@@ -26,6 +26,7 @@ import 'package:PiliPlus/plugin/pl_player/models/data_status.dart';
 import 'package:PiliPlus/plugin/pl_player/models/double_tap_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/duration.dart';
 import 'package:PiliPlus/plugin/pl_player/models/fullscreen_mode.dart';
+import 'package:PiliPlus/plugin/pl_player/models/hdr_config.dart';
 import 'package:PiliPlus/plugin/pl_player/models/heart_beat_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_repeat.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
@@ -586,7 +587,14 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   late int? cacheVideoQa = PlatformUtils.isMobile ? null : Pref.defaultVideoQa;
   late int cacheAudioQa = Pref.defaultAudioQa;
   bool enableHeart = true;
-  late final String? hwdec = Pref.enableHA ? Pref.hardwareDecoding : null;
+  late final String? hwdec = _resolveHwdec();
+
+  /// HDR 解码方式优先于「硬解模式」，因为色调映射需要非直通的解码输出；
+  /// 未开启硬解时仍保持软解，HDR 设置不会强行打开硬件解码。
+  static String? _resolveHwdec() {
+    if (!Pref.enableHA) return null;
+    return HdrConfig.fromPref().hwdecOverride ?? Pref.hardwareDecoding;
+  }
 
   late final progressType = Pref.btmProgressBehavior;
   late final enableQuickDouble = Pref.enableQuickDouble;
@@ -982,6 +990,32 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     } catch (_) {}
   }
 
+  /// 设置页修改 HDR / 杜比视界选项后调用，使参数立即作用于当前播放器。
+  void applyHdrOptions() {
+    final player = _videoPlayerController;
+    if (player == null) return;
+    _applyHdrProperties(player);
+  }
+
+  /// 写入 mpv 的 HDR 色彩处理参数。
+  ///
+  /// 这里只改 `--tone-mapping` / `--hdr-compute-peak` / `--target-peak`
+  /// 等运行期属性，不触碰 `--vo`：media_kit 依赖固定的视频输出驱动把画面
+  /// 交给 Flutter 纹理，替换 `--vo` 会导致黑屏。
+  void _applyHdrProperties(Player player) {
+    try {
+      // 先复位再写入，确保关闭 HDR 后不会残留上一次的参数
+      for (final entry in HdrConfig.resetProperties.entries) {
+        player.setProperty(entry.key, entry.value);
+      }
+      for (final entry in HdrConfig.fromPref().mpvProperties.entries) {
+        player.setProperty(entry.key, entry.value);
+      }
+    } catch (_) {
+      // 个别平台的 libmpv 构建不支持其中某些属性，忽略即可
+    }
+  }
+
   void _scheduleVideoPictureSettingsSave() {
     if (tempPlayerConf) return;
     _videoPictureSaveTimer?.cancel();
@@ -1223,6 +1257,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         options: opt,
       ),
     );
+
+    // HDR / 杜比视界：必须在视频输出初始化前写入，vo 创建时才会读取这些参数
+    _applyHdrProperties(player);
 
     assert(_videoController == null);
 

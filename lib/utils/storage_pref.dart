@@ -1307,6 +1307,34 @@ abstract final class Pref {
   static bool get enableHA =>
       _setting.get(SettingBoxKey.enableHA, defaultValue: true);
 
+  /// HDR / 杜比视界色彩处理总开关。
+  static bool get enableHdr =>
+      _setting.get(SettingBoxKey.enableHdr, defaultValue: true);
+
+  /// HDR 输出模式（auto / passthrough），见 HdrOutputMode。
+  static String get hdrOutputMode =>
+      _setting.get(SettingBoxKey.hdrOutputMode, defaultValue: 'auto');
+
+  /// 色调映射算法（mpv --tone-mapping 取值），见 HdrToneMapping。
+  static String get hdrToneMapping =>
+      _setting.get(SettingBoxKey.hdrToneMapping, defaultValue: 'auto');
+
+  /// 目标峰值亮度（nits），`0` 表示自动。
+  static int get hdrTargetPeak =>
+      _setting.get(SettingBoxKey.hdrTargetPeak, defaultValue: 0);
+
+  /// 是否逐帧计算峰值亮度（mpv `--hdr-compute-peak`）。
+  static bool get hdrComputePeak =>
+      _setting.get(SettingBoxKey.hdrComputePeak, defaultValue: true);
+
+  /// HDR 解码方式（follow / copy / direct），见 HdrHwdecMode。
+  static String get hdrHwdecMode =>
+      _setting.get(SettingBoxKey.hdrHwdecMode, defaultValue: 'follow');
+
+  /// 杜比视界兼容模式：硬件解码器无法处理 DoVi 元数据时回退到 HDR10 片源。
+  static bool get dolbyVisionFallback =>
+      _setting.get(SettingBoxKey.dolbyVisionFallback, defaultValue: false);
+
   static Set<int> get danmakuBlockType => Set<int>.from(
     _setting.get(SettingBoxKey.danmakuBlockType, defaultValue: const <int>{}),
   );

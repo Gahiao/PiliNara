@@ -1,6 +1,7 @@
 import 'package:PiliPlus/models/common/video/audio_quality.dart';
 import 'package:PiliPlus/models/common/video/cdn_type.dart';
 import 'package:PiliPlus/models/common/video/video_decode_type.dart';
+import 'package:PiliPlus/models/common/video/video_quality.dart';
 import 'package:PiliPlus/models/video/play/url.dart'
     show AudioItem, VideoItem, FormatItem;
 import 'package:PiliPlus/models_new/live/live_room_play_info/codec.dart';
@@ -198,15 +199,46 @@ abstract final class VideoUtils {
     int preferQuality,
   ) {
     final highestVideoQa = videoList.first.id;
+
+    final int quality;
     if (preferQuality >= highestVideoQa) {
-      return highestVideoQa;
+      quality = highestVideoQa;
+    } else if (acceptQuality != null && acceptQuality.isNotEmpty) {
+      quality = acceptQuality.findTargetMedia((e) => e, preferQuality);
+    } else {
+      quality = videoList.findTargetMedia((e) => e.id, preferQuality).quality.code;
     }
 
-    if (acceptQuality != null && acceptQuality.isNotEmpty) {
-      return acceptQuality.findTargetMedia((e) => e, preferQuality);
+    return _resolveDolbyVisionFallback(videoList, quality);
+  }
+
+  /// 杜比视界兼容模式。
+  ///
+  /// 部分设备的硬件解码器无法处理 Dolby Vision 的 RPU 元数据（表现为黑屏、
+  /// 偏色或花屏），开启该选项后若存在分辨率不低于杜比视界流的 HDR10
+  /// （画质 id `125`）片源，则改用 HDR10，以保证正常出画。
+  static int _resolveDolbyVisionFallback(
+    List<VideoItem> videoList,
+    int quality,
+  ) {
+    if (quality != VideoQuality.dolbyVision.code ||
+        !Pref.dolbyVisionFallback) {
+      return quality;
     }
 
-    return videoList.findTargetMedia((e) => e.id, preferQuality).quality.code;
+    VideoItem? dolbyVision;
+    VideoItem? hdr;
+    for (final item in videoList) {
+      if (item.id == VideoQuality.dolbyVision.code) {
+        dolbyVision ??= item;
+      } else if (item.id == VideoQuality.hdr.code) {
+        hdr ??= item;
+      }
+    }
+
+    if (dolbyVision == null || hdr == null) return quality;
+    if ((hdr.height ?? 0) < (dolbyVision.height ?? 0)) return quality;
+    return VideoQuality.hdr.code;
   }
 
   static (
