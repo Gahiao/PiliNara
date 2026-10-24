@@ -179,7 +179,7 @@ class _BvSwitchDialogState extends State<_BvSwitchDialog> {
                   decoration: const InputDecoration(
                     labelText: '等待时间',
                     hintText: '5',
-                    helperText: '跳转前等待的秒数(1~10)',
+                    helperText: '询问Toast停留时间(1~10s)',
                     counterText: '',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.all(Radius.circular(6)),
