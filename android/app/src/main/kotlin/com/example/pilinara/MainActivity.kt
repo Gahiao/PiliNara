@@ -76,7 +76,8 @@ class MainActivity : AudioServiceActivity() {
                     result.success(null)
                 }
                 "setHdr" -> {
-                    host.setHdr(owner = intArg("owner"), hdr = boolArg("hdr"))
+                    // 保留方法名以兼容旧调用；当前实现不再主动切换窗口色彩模式，
+                    // 避免整屏高亮闪屏。
                     result.success(null)
                 }
                 "remove" -> {

@@ -1,7 +1,6 @@
 package com.example.pilinara
 
 import android.app.Activity
-import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -30,7 +29,7 @@ import java.lang.reflect.Method
  * 播放器通过 `com.pilinara/video_surface` 通道驱动本类：
  * - `create`：首次创建（或在页面/小窗之间转移所有权时复用）SurfaceView；
  * - `setRect`：把 SurfaceView 摆到 Flutter 上报的物理像素矩形；
- * - `setHdr`：仅在真正的 HDR 播放时请求窗口 HDR 色彩模式；
+ * - `setHdr`：保留的兼容方法（当前不再主动请求窗口 HDR 色彩模式，避免整屏高亮闪屏）；
  * - `remove`：延迟销毁（避免小窗 ↔ 页面切换时 Surface 反复重建导致黑闪）；
  * - `capture`：用 PixelCopy 截图（HDR 直通时 mpv 自身拿不到画面）。
  *
@@ -57,7 +56,6 @@ class VideoSurfaceHost(
     private var ownerId = 0
     private var wid = 0L
     private var tenBit = false
-    private var colorModeApplied = false
     private var pendingTeardown: Runnable? = null
 
     private val newGlobalObjectRef: Method? = runCatching {
@@ -126,14 +124,6 @@ class VideoSurfaceHost(
     fun setRect(owner: Int, left: Int, top: Int, width: Int, height: Int) {
         if (owner != ownerId) return
         applyLayout(left, top, width.coerceAtLeast(1), height.coerceAtLeast(1))
-    }
-
-    /** 切换窗口色彩模式。仅 HDR 播放时开启，退出/销毁时复位。 */
-    fun setHdr(owner: Int, hdr: Boolean) {
-        if (owner != ownerId) return
-        // Surface 已销毁时不要再把窗口切到 HDR，否则会留下无画面的 HDR 窗口。
-        if (hdr && (surfaceView == null || wid == 0L)) return
-        applyColorMode(hdr)
     }
 
     /**
@@ -351,17 +341,6 @@ class VideoSurfaceHost(
         sv.layoutParams = params
     }
 
-    private fun applyColorMode(hdr: Boolean) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        if (colorModeApplied == hdr) return
-        colorModeApplied = hdr
-        runCatching {
-            activity.window.setColorMode(
-                if (hdr) ActivityInfo.COLOR_MODE_HDR else ActivityInfo.COLOR_MODE_DEFAULT,
-            )
-        }.onFailure { Log.w(TAG, "setColorMode(hdr=$hdr) failed", it) }
-    }
-
     private fun teardownNow() {
         cancelPendingTeardown()
         val sv = surfaceView
@@ -373,7 +352,6 @@ class VideoSurfaceHost(
         releaseWid(wid)
         wid = 0L
         tenBit = false
-        applyColorMode(false)
     }
 
     private fun releaseWid(ref: Long) {
