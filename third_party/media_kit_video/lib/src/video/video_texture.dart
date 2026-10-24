@@ -12,6 +12,7 @@ import 'package:media_kit_video/src/subtitle/subtitle_view.dart';
 import 'package:media_kit_video/media_kit_video_controls/media_kit_video_controls.dart'
     as media_kit_video_controls;
 import 'package:media_kit_video/src/utils/dispose_safe_notifer.dart';
+import 'package:media_kit_video/src/video/hdr_surface.dart';
 
 import 'package:media_kit_video/src/video_view_parameters.dart';
 import 'package:media_kit_video/src/video_controller/video_controller.dart';
@@ -383,17 +384,17 @@ class VideoState extends State<Video> with WidgetsBindingObserver {
                                           // SurfaceView (hybrid composition)
                                           // instead of a Texture, so that
                                           // 10-bit / HDR metadata survives.
-                                          ? AndroidView(
-                                              viewType:
-                                                  'media_kit_video/hdr_surface',
-                                              creationParams: {
-                                                'handle': widget
-                                                    .controller
-                                                    .player
-                                                    .handle,
-                                              },
-                                              creationParamsCodec:
-                                                  const StandardMessageCodec(),
+                                          ? MpvHdrSurface(
+                                              handle: widget
+                                                  .controller
+                                                  .player
+                                                  .handle,
+                                              tenBit:
+                                                  widget
+                                                      .controller
+                                                      .configuration
+                                                      .vo !=
+                                                  'mediacodec_embed',
                                             )
                                           : Texture(
                                               textureId: id!,

@@ -180,10 +180,12 @@ class HdrConfig {
   }
 
   /// 关闭 HDR 时用于复位的取值，与 media_kit 初始化后的默认值保持一致。
+  ///
+  /// 注意：`target-peak=auto` 在部分设备/后端上会导致视频输出创建失败（黑屏），
+  /// 所以这里不复位该项；「自动」的含义就是从不设置它，交给 mpv 默认值。
   static const Map<String, String> resetProperties = {
     'tone-mapping': 'auto',
     'hdr-compute-peak': 'no',
-    'target-peak': 'auto',
     'target-colorspace-hint': 'no',
     'dither': 'no',
     'dither-depth': 'auto',

@@ -23,16 +23,22 @@ public class HdrSurfaceViewFactory extends PlatformViewFactory {
     @Override
     public PlatformView create(Context context, int viewId, Object args) {
         long handle = 0;
+        boolean tenBit = true;
         try {
             if (args instanceof Map) {
-                final Object value = ((Map<?, ?>) args).get("handle");
+                final Map<?, ?> map = (Map<?, ?>) args;
+                final Object value = map.get("handle");
                 if (value != null) {
                     handle = Long.parseLong(value.toString());
+                }
+                final Object bit = map.get("tenBit");
+                if (bit instanceof Boolean) {
+                    tenBit = (Boolean) bit;
                 }
             }
         } catch (Throwable e) {
             e.printStackTrace();
         }
-        return new HdrSurfaceView(context, handle, channelReference);
+        return new HdrSurfaceView(context, handle, tenBit, channelReference);
     }
 }

@@ -1319,6 +1319,13 @@ abstract final class Pref {
   static String get hdrToneMapping =>
       _setting.get(SettingBoxKey.hdrToneMapping, defaultValue: 'auto');
 
+  /// 是否使用 SurfaceView 出画以触发真 HDR（实验，默认关闭）。
+  ///
+  /// hybrid composition 的原生 View 位于 Flutter 渲染层之上，弹幕、控制栏
+  /// 等 Flutter 叠加内容会被遮挡，并可能残留/黑屏，因此默认不启用。
+  static bool get hdrSurface =>
+      _setting.get(SettingBoxKey.hdrSurface, defaultValue: false);
+
   /// 目标峰值亮度（nits），`0` 表示自动。
   static int get hdrTargetPeak =>
       _setting.get(SettingBoxKey.hdrTargetPeak, defaultValue: 0);
@@ -1332,8 +1339,12 @@ abstract final class Pref {
       _setting.get(SettingBoxKey.hdrHwdecMode, defaultValue: 'auto');
 
   /// HDR 渲染后端（gpu-next / gpu / mediacodec_embed），见 HdrBackend。
+  ///
+  /// 默认 mediacodec_embed：当前 libmpv 构建没有 Android HDR 输出能力
+  /// （缺 ANativeWindow_setBuffersDataSpace / EGL 色彩空间扩展），
+  /// 只有解码器直通 Surface 才能让系统点亮 HDR。
   static String get hdrBackend =>
-      _setting.get(SettingBoxKey.hdrBackend, defaultValue: 'gpu-next');
+      _setting.get(SettingBoxKey.hdrBackend, defaultValue: 'mediacodec_embed');
 
   /// 杜比视界兼容模式：硬件解码器无法处理 DoVi 元数据时回退到 HDR10 片源。
   static bool get dolbyVisionFallback =>

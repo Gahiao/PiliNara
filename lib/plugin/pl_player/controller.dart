@@ -1050,10 +1050,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     return [
       '出画路径: ${_hdrSurface ? 'SurfaceView' : 'Texture(8bit)'}',
       'vo: ${read('vo')}',
+      'vo-configured: ${read('vo-configured')}',
       'hwdec-current: ${read('hwdec-current')}',
       '视频色彩: ${read('video-params/primaries')} / ${read('video-params/gamma')}',
       '像素格式: ${read('video-params/pixelformat')}',
-      '片源峰值亮度: ${read('video-params/sig-peak')}',
+      '色彩矩阵: ${read('video-params/colormatrix')}',
+      // sig-peak 是相对 SDR 白点（100nits）的倍数，不是 nits。
+      '片源 sig-peak: ${read('video-params/sig-peak')}（×100nits）',
       'tone-mapping: ${read('tone-mapping')}',
       'hdr-compute-peak: ${read('hdr-compute-peak')}',
       'target-peak: ${read('target-peak')}',
@@ -1078,11 +1081,60 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   void applyHdrOptions() {
     final player = _videoPlayerController;
     if (player == null) return;
-    _applyHdrProperties(player, hdrSurface: _hdrSurface);
+    _applyHdrProperties(player, hdrSurface: _hdrSurface && isHdrSource);
   }
 
   /// 是否正在使用 Android SurfaceView 出画（HDR 片源专用）。
   bool _hdrSurface = false;
+
+  /// 是否走「视频在 Flutter 之下」的原生 SurfaceView 出画。
+  bool get useNativeSurface => _hdrSurface;
+
+  int? _nativeWid;
+  (int, int)? _nativeSize;
+
+  /// 原生 SurfaceView 就绪后，把 `wid` / 尺寸交给 mpv。
+  void attachNativeSurface(int wid, int width, int height) {
+    if (wid == 0) return;
+    _nativeWid = wid;
+    _nativeSize = (width, height);
+    _applyNativeSurface();
+  }
+
+  void resizeNativeSurface(int width, int height) {
+    _nativeSize = (width, height);
+    _applyNativeSurface();
+  }
+
+  void detachNativeSurface() {
+    _nativeWid = null;
+    _nativeSize = null;
+    final player = _videoPlayerController;
+    if (player == null) return;
+    try {
+      player.setProperty('vo', 'null');
+      player.setProperty('wid', '0');
+    } catch (_) {}
+  }
+
+  void _applyNativeSurface() {
+    final player = _videoPlayerController;
+    final wid = _nativeWid;
+    final size = _nativeSize;
+    if (player == null || wid == null || size == null) return;
+    if (size.$1 <= 0 || size.$2 <= 0) return;
+    try {
+      // 顺序很重要：先复位 vo，再给尺寸/wid，最后设置 vo。
+      player.setProperty('vo', 'null');
+      player.setProperty('android-surface-size', '${size.$1}x${size.$2}');
+      player.setProperty('wid', '$wid');
+      player.setProperty('vid', 'auto');
+      player.setProperty('vo', Pref.hdrBackend);
+      debugPrint(
+        '[HDR] nativeSurface vo=${Pref.hdrBackend} wid=$wid ${size.$1}x${size.$2}',
+      );
+    } catch (_) {}
+  }
 
   /// 写入 mpv 的 HDR 色彩处理参数。
   ///
@@ -1349,13 +1401,17 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // HDR 片源在 Android 上改用 SurfaceView 出画：Flutter 纹理固定为
     // RGBA8888，会把 10bit / HDR 元数据丢掉，SurfaceView 才能让 libmpv
     // 申请 10bit 的 EGL 表面并经 target-colorspace-hint 激发面板 HDR。
+    // HDR 片源可选的 SurfaceView 出画路径：能真正触发面板 HDR，但
+    // hybrid composition 的原生 View 会盖住 Flutter 叠加层（弹幕/控件），
+    // 因此只在用户显式开启实验开关时启用。
     _hdrSurface = Platform.isAndroid &&
         Pref.enableHdr &&
+        Pref.hdrSurface &&
         (isHdrSource || hasHdrStream);
     debugPrint(
-      '[HDR] init: enable=${Pref.enableHdr} hdrSource=$isHdrSource '
-      'hasHdrStream=$hasHdrStream surface=$_hdrSurface '
-      'vo=${_hdrSurface ? 'gpu-next' : '-'}',
+      '[HDR] init: enable=${Pref.enableHdr} exp=${Pref.hdrSurface} '
+      'hdrSource=$isHdrSource hasHdrStream=$hasHdrStream surface=$_hdrSurface '
+      'vo=${_hdrSurface ? Pref.hdrBackend : '-'}',
     );
 
     final player = await Player.create(
@@ -1371,7 +1427,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     });
 
     // HDR / 杜比视界：必须在视频输出初始化前写入，vo 创建时才会读取这些参数
-    _applyHdrProperties(player, hdrSurface: _hdrSurface);
+    _applyHdrProperties(player, hdrSurface: _hdrSurface && isHdrSource);
 
     assert(_videoController == null);
 
@@ -1392,6 +1448,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       // Avoid sizing the surface using mpv's idle window between media loads.
       player.setProperty('force-window', 'no');
     }
+
+    // 原生 SurfaceView 可能早于播放器就绪，这里补一次挂载。
+    _applyNativeSurface();
 
     player.setMediaHeader(userAgent: BrowserUa.pc, referer: HttpString.baseUrl);
 
@@ -2803,11 +2862,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   void dispose() {
     _hdrSnapshotTimer?.cancel();
-    // 销毁前抓一次最终状态，设置页之后仍能回看
-    if (_videoPlayerController != null) {
-      final info = hdrDebugInfo;
-      if (!info.contains('播放器尚未初始化')) _lastHdrSnapshot = info;
-    }
+    // 注意：不要在这里抓快照。销毁过程中 surfaceDestroyed 会把 vo 置回 null，
+    // 抓到的会是「拆机态」。播放中每 5 秒的快照已经足够还原真实状态。
     _cancelAutoAudioOnlyTimer();
     _interruptAutoAudioRestore();
     _autoAudioState = AutoAudioOnlyState.idle;

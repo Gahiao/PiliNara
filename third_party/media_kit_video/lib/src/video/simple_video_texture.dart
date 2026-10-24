@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:media_kit_video/src/video/hdr_surface.dart';
 
 class SimpleVideo extends StatefulWidget {
   final Color fill;
@@ -77,10 +77,9 @@ class SimpleVideoState extends State<SimpleVideo> {
             child: Stack(
               children: [
                 if (surfaceView)
-                  AndroidView(
-                    viewType: 'media_kit_video/hdr_surface',
-                    creationParams: {'handle': ctr.player.handle},
-                    creationParamsCodec: const StandardMessageCodec(),
+                  MpvHdrSurface(
+                    handle: ctr.player.handle,
+                    tenBit: ctr.configuration.vo != 'mediacodec_embed',
                   )
                 else
                   Texture(textureId: id!, filterQuality: widget.filterQuality),

@@ -84,7 +84,12 @@ class AndroidVideoController extends PlatformVideoController {
   /// directly into this surface.
   Future<void> _applySurfaceView(int? wid, int width, int height) {
     return lock.synchronized(() async {
+      debugPrint(
+        '[HDR] applySurfaceView wid=$wid size=${width}x$height '
+        'vo=${configuration.vo}',
+      );
       if (wid == null || wid == 0 || width <= 0 || height <= 0) {
+        debugPrint('[HDR] applySurfaceView skipped (invalid wid/size)');
         return;
       }
       // It is important to re-initialize --vo after --android-surface-size.
@@ -98,6 +103,7 @@ class AndroidVideoController extends PlatformVideoController {
         // mediacodec_embed 由解码器直接输出到 Surface，需要重新启用 --vid。
         if (vo == 'mediacodec_embed') 'vid': 'auto',
       });
+      debugPrint('[HDR] applySurfaceView applied vo=$vo wid=$wid');
       // Seek to the current position so the new vo starts rendering without
       // jumping back to the beginning of the media.
       await player.seek(player.state.position);
@@ -106,6 +112,7 @@ class AndroidVideoController extends PlatformVideoController {
 
   Future<void> _detachSurfaceView() {
     return lock.synchronized(() async {
+      debugPrint('[HDR] detachSurfaceView');
       player.setProperty('vo', 'null');
       setProperties({'wid': '0'});
     });

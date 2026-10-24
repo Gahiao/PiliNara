@@ -39,6 +39,7 @@ import 'package:PiliPlus/pages/video/post_panel/popup_menu_text.dart';
 import 'package:PiliPlus/pages/video/post_panel/view.dart';
 import 'package:PiliPlus/pages/video/widgets/header_control.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
+import 'package:PiliPlus/plugin/pl_player/utils/native_video_surface.dart';
 import 'package:PiliPlus/plugin/pl_player/models/bottom_control_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/data_status.dart';
 import 'package:PiliPlus/plugin/pl_player/models/double_tap_type.dart';
@@ -2470,7 +2471,11 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
           clipBehavior: .none,
           width: finalWidth,
           height: finalHeight,
-          color: widget.fill,
+          // HDR 原生出画时视频在 Flutter 之下，这里必须保持透明，
+          // 否则不透明底色会把原生 SurfaceView 完全盖住（表现为黑屏）。
+          color: plPlayerController.useNativeSurface
+              ? Colors.transparent
+              : widget.fill,
           child: Obx(
             () => MouseInteractiveViewer(
               scaleEnabled: !plPlayerController.controlsLock.value,
@@ -2507,11 +2512,18 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                       child: FittedBox(
                         fit: videoFit.boxFit,
                         alignment: widget.alignment,
-                        child: SimpleVideo(
-                          controller: plPlayerController.videoController!,
-                          fill: widget.fill,
-                          aspectRatio: videoFit.aspectRatio,
-                        ),
+                        child: plPlayerController.useNativeSurface
+                            // HDR：视频由 Flutter 下方的原生 SurfaceView 输出，
+                            // 这里只保留同尺寸的透明占位。
+                            ? NativeVideoSurface(
+                                controller: plPlayerController,
+                                aspectRatio: videoFit.aspectRatio,
+                              )
+                            : SimpleVideo(
+                                controller: plPlayerController.videoController!,
+                                fill: widget.fill,
+                                aspectRatio: videoFit.aspectRatio,
+                              ),
                       ),
                     );
                   },

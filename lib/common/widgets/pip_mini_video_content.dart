@@ -1,4 +1,5 @@
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
+import 'package:PiliPlus/plugin/pl_player/utils/native_video_surface.dart';
 import 'package:PiliPlus/services/pip_transition_coordinator.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:get/get.dart';
@@ -43,10 +44,15 @@ class PipMiniVideoContent extends StatelessWidget {
               child: FittedBox(
                 fit: videoFit.boxFit,
                 clipBehavior: Clip.hardEdge,
-                child: SimpleVideo(
-                  controller: videoController,
-                  aspectRatio: videoFit.aspectRatio,
-                ),
+                child: plPlayerController.useNativeSurface
+                    ? NativeVideoSurface(
+                        controller: plPlayerController,
+                        aspectRatio: videoFit.aspectRatio,
+                      )
+                    : SimpleVideo(
+                        controller: videoController,
+                        aspectRatio: videoFit.aspectRatio,
+                      ),
               ),
             );
           }),

@@ -78,9 +78,16 @@ List<SettingsModel> get videoSettings => [
     leading: const Icon(Icons.memory_outlined),
     getSubtitle: () {
       final mode = HdrHwdecMode.fromValue(Pref.hdrHwdecMode);
-      return '当前：${mode.label}。${mode.desc}（切换画质或重开视频时生效）';
+      return '当前：${mode.label}。${mode.desc}';
     },
     onTap: _showHdrHwdecDialog,
+  ),
+  SwitchModel(
+    title: 'HDR 直通出画（实验）',
+    subtitle: '用 SurfaceView 直接送显以触发面板 HDR。代价：弹幕、控制栏等 Flutter 叠加内容会被遮挡，可能出现黑屏/残留，默认关闭',
+    leading: const Icon(Icons.hdr_strong),
+    setKey: SettingBoxKey.hdrSurface,
+    defaultVal: false,
   ),
   NormalModel(
     title: 'HDR 渲染后端',
@@ -92,7 +99,7 @@ List<SettingsModel> get videoSettings => [
         HdrBackend.gpu => '兼容性好，但通常无法激发 HDR',
         HdrBackend.mediacodecEmbed => '解码器直接送显，HDR 由系统直通，不走 mpv 渲染',
       };
-      return '当前：${backend.label}。$desc（重新打开视频生效）';
+      return '当前：${backend.label}。$desc';
     },
     onTap: _showHdrBackendDialog,
   ),
@@ -777,7 +784,6 @@ Future<void> _showHdrBackendDialog(
   );
   if (res != null) {
     await GStorage.setting.put(SettingBoxKey.hdrBackend, res);
-    SmartDialog.showToast('重新打开视频后生效');
     setState();
   }
 }
@@ -891,7 +897,6 @@ Future<void> _showHdrHwdecDialog(
   );
   if (res != null) {
     await GStorage.setting.put(SettingBoxKey.hdrHwdecMode, res);
-    SmartDialog.showToast('切换画质或重开视频后生效');
     setState();
   }
 }

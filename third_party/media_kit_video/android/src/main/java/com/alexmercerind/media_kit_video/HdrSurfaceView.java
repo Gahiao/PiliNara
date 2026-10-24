@@ -49,9 +49,18 @@ public class HdrSurfaceView implements PlatformView {
      */
     private long wid = 0;
 
-    HdrSurfaceView(Context context, long handle, MethodChannel channelReference) {
+    /** 是否申请 10bit 缓冲。mediacodec_embed 由解码器决定格式，不能强设。 */
+    private final boolean tenBit;
+
+    /** 宿主 Activity，用于设置/恢复窗口的 HDR 色彩模式。 */
+    private final android.app.Activity activity;
+
+    HdrSurfaceView(Context context, long handle, boolean tenBit, MethodChannel channelReference) {
         this.handle = handle;
+        this.tenBit = tenBit;
         this.channelReference = channelReference;
+        this.activity =
+            (context instanceof android.app.Activity) ? (android.app.Activity) context : null;
 
         Method newGlobalObjectRefRef = null;
         Method deleteGlobalObjectRefRef = null;
@@ -80,24 +89,17 @@ public class HdrSurfaceView implements PlatformView {
 
         // Request a 10-bit buffer for the SurfaceView. The EGL configuration
         // requested by libmpv must match this format for HDR to survive.
-        try {
-            surfaceView.getHolder().setFormat(PixelFormat.RGBA_1010102);
-        } catch (Throwable e) {
-            Log.e(TAG, "HdrSurfaceView: unable to request RGBA_1010102", e);
+        // mediacodec_embed 模式下缓冲由 MediaCodec 自己决定，不能强设格式。
+        if (tenBit) {
+            try {
+                surfaceView.getHolder().setFormat(PixelFormat.RGBA_1010102);
+            } catch (Throwable e) {
+                Log.e(TAG, "HdrSurfaceView: unable to request RGBA_1010102", e);
+            }
         }
 
         // Let the system know this window may render HDR content.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                if (context instanceof android.app.Activity) {
-                    ((android.app.Activity) context)
-                        .getWindow()
-                        .setColorMode(ActivityInfo.COLOR_MODE_HDR);
-                }
-            } catch (Throwable e) {
-                e.printStackTrace();
-            }
-        }
+        setWindowColorMode(ActivityInfo.COLOR_MODE_HDR);
 
         surfaceView.getHolder().addCallback(
             new SurfaceHolder.Callback() {
@@ -150,6 +152,9 @@ public class HdrSurfaceView implements PlatformView {
                 @Override
                 public void surfaceDestroyed(SurfaceHolder holder) {
                     synchronized (HdrSurfaceView.this) {
+                        // 退出播放页/视图销毁时必须把窗口色彩模式复位，
+                        // 否则面板会一直停留在 HDR 高亮状态。
+                        setWindowColorMode(ActivityInfo.COLOR_MODE_DEFAULT);
                         notifyDart("HdrSurface.SurfaceDestroyed", wid, 0, 0);
                         final long ref = wid;
                         wid = 0;
@@ -173,6 +178,18 @@ public class HdrSurfaceView implements PlatformView {
         );
     }
 
+    /** Sets the window colour mode, ignoring failures on older devices. */
+    private void setWindowColorMode(int colorMode) {
+        if (activity == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+        try {
+            activity.getWindow().setColorMode(colorMode);
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+    }
+
     private void notifyDart(String method, long wid, int width, int height) {
         try {
             final HashMap<String, Object> data = new HashMap<>();
@@ -193,6 +210,9 @@ public class HdrSurfaceView implements PlatformView {
 
     @Override
     public void dispose() {
+        // 视图销毁时同样复位窗口色彩模式（某些情况下 dispose 先于
+        // surfaceDestroyed 执行）。
+        setWindowColorMode(ActivityInfo.COLOR_MODE_DEFAULT);
         synchronized (this) {
             final long ref = wid;
             wid = 0;
