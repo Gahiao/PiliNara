@@ -36,7 +36,7 @@ List<SettingsModel> get videoSettings => [
   ),
   SwitchModel(
     title: 'HDR 支持',
-    subtitle: '为 HDR / HDR Vivid / 杜比视界片源启用色调映射与广色域处理，关闭后保持默认渲染',
+    subtitle: '为 HDR / 杜比视界片源启用色调映射与广色域处理，关闭后保持默认渲染',
     leading: const Icon(Icons.hdr_on),
     setKey: SettingBoxKey.enableHdr,
     defaultVal: true,
