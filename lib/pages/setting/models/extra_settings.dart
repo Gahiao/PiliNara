@@ -39,9 +39,6 @@ import 'package:material_ui/material_ui.dart' hide RefreshIndicator;
 import 'package:PiliPlus/pages/setting/widgets/bv_jump_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/portraitSlideDialog.dart';
 
-import '../../../utils/storage_key.dart';
-import 'model.dart';
-
 List<SettingsModel> get extraSettings => [
   if (PlatformUtils.isDesktop) ...[
     SwitchModel(

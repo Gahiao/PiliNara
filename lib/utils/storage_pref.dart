@@ -1821,9 +1821,13 @@ abstract final class Pref {
       _setting.put(SettingBoxKey.bvJumpToastText, value);
 
 
-  static String get bvJumpWaitSec =>
-      _setting.get(SettingBoxKey.bvJumpWaitSec,
-          defaultValue: "5");
+  static String get bvJumpWaitSec {
+    final value = _setting.get(
+      SettingBoxKey.bvJumpWaitSec,
+      defaultValue: '5',
+    );
+    return value == null ? '5' : value.toString();
+  }
 
   static set bvJumpWaitSec(String value) =>
       _setting.put(SettingBoxKey.bvJumpWaitSec, value);
