@@ -24,6 +24,10 @@ final class VideoQuality {
   @override
   int get hashCode => code.hashCode;
 
+  /// 该画质是否为 HDR 类片源（HDR / 杜比视界 / HDR Vivid）。
+  bool get isHdr =>
+      code == hdr.code || code == dolbyVision.code || code == hdrVivid.code;
+
   static const VideoQuality hdrVivid = .new(129, 'HDR Vivid', 'HDR Vivid');
   static const VideoQuality super8k = .new(127, '8K 超高清', '8K');
   static const VideoQuality dolbyVision = .new(126, '杜比视界', '杜比');

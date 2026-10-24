@@ -587,13 +587,36 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   late int? cacheVideoQa = PlatformUtils.isMobile ? null : Pref.defaultVideoQa;
   late int cacheAudioQa = Pref.defaultAudioQa;
   bool enableHeart = true;
+
+  /// 当前片源是否为 HDR / 杜比视界流，由播放页在 setDataSource 前写入。
+  bool isHdrSource = false;
+
+  /// 当前视频是否提供 HDR / 杜比视界流（即使当前选中的是 SDR 画质）。
+  /// 出画方式在播放器创建时固定，用它来决定是否走 SurfaceView。
+  bool hasHdrStream = false;
+
   late final String? hwdec = _resolveHwdec();
 
-  /// HDR 解码方式优先于「硬解模式」，因为色调映射需要非直通的解码输出；
-  /// 未开启硬解时仍保持软解，HDR 设置不会强行打开硬件解码。
-  static String? _resolveHwdec() {
+  /// 由 [HdrHwdecMode] 与片源类型决定最终使用的 `--hwdec`。
+  ///
+  /// 直通解码（如 Android 的 `mediacodec`）不会把画面交回 mpv，色调映射、
+  /// 峰值亮度等 HDR 参数会全部无效；因此「自动」模式下 HDR 片源改用拷贝解码，
+  /// SDR 片源仍沿用「硬解模式」的设置。
+  String? _resolveHwdec() {
     if (!Pref.enableHA) return null;
-    return HdrConfig.fromPref().hwdecOverride ?? Pref.hardwareDecoding;
+    if (HdrBackend.fromValue(Pref.hdrBackend) == HdrBackend.mediacodecEmbed) {
+      // mediacodec_embed 由 MediaCodec 直接解码到 Surface，必须配合直通硬解。
+      return 'mediacodec';
+    }
+    final config = HdrConfig.fromPref();
+    if (!config.enabled) return Pref.hardwareDecoding;
+    return switch (config.hwdecMode) {
+      HdrHwdecMode.auto =>
+        isHdrSource ? config.copyHwdec : Pref.hardwareDecoding,
+      HdrHwdecMode.follow => Pref.hardwareDecoding,
+      HdrHwdecMode.copy => config.copyHwdec,
+      HdrHwdecMode.direct => config.directHwdec,
+    };
   }
 
   late final progressType = Pref.btmProgressBehavior;
@@ -990,25 +1013,97 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     } catch (_) {}
   }
 
+  /// 上一次播放的 HDR 状态快照。
+  ///
+  /// 设置页无法在播放时打开（会先销毁播放页），所以播放过程中定时把状态
+  /// 存下来，播放结束后仍可在「HDR 状态诊断」里回看。
+  static String _lastHdrSnapshot = '';
+  Timer? _hdrSnapshotTimer;
+
+  /// 当前（或上一次）播放器与 HDR 相关的运行时状态。
+  ///
+  /// 关键看几处：
+  /// * `出画路径`：`SurfaceView` 才可能真正输出 HDR；
+  /// * `vo`：必须是 `gpu-next`，`target-colorspace-hint` 才会生效；
+  /// * `hwdec-current`：`mediacodec` 表示直通，画面不经过 mpv；
+  /// * `视频色彩`：gamma 为 `pq` / `hlg` 才是 HDR 片源，`bt.1886` 是 SDR。
+  /// 设置页读取用：优先由当前播放器实时生成，播放器已销毁时回退到上次快照。
+  ///
+  /// 设置页会在打开时销毁播放页，所以不能依赖 [PlPlayerController.instance]。
+  static String get lastHdrInfo => _lastHdrSnapshot.isEmpty
+      ? '播放器尚未初始化。\n请先播放一个视频（播放中无法打开设置页），\n播放几秒后再回到这里查看上次播放的快照。'
+      : '（上次播放的快照）\n$_lastHdrSnapshot';
+
+  String get hdrDebugInfo {
+    final player = _videoPlayerController;
+    if (player == null) return lastHdrInfo;
+
+    String read(String property) {
+      try {
+        final value = player.getProperty(property);
+        return value.isEmpty ? '-' : value;
+      } catch (_) {
+        return '-';
+      }
+    }
+
+    return [
+      '出画路径: ${_hdrSurface ? 'SurfaceView' : 'Texture(8bit)'}',
+      'vo: ${read('vo')}',
+      'hwdec-current: ${read('hwdec-current')}',
+      '视频色彩: ${read('video-params/primaries')} / ${read('video-params/gamma')}',
+      '像素格式: ${read('video-params/pixelformat')}',
+      '片源峰值亮度: ${read('video-params/sig-peak')}',
+      'tone-mapping: ${read('tone-mapping')}',
+      'hdr-compute-peak: ${read('hdr-compute-peak')}',
+      'target-peak: ${read('target-peak')}',
+      'target-colorspace-hint: ${read('target-colorspace-hint')}',
+      'dither: ${read('dither')}',
+      'HDR 开关: ${Pref.enableHdr ? '开' : '关'}，片源判定: ${isHdrSource ? 'HDR' : 'SDR'}',
+    ].join('\n');
+  }
+
+  /// 播放期间每 5 秒刷新一次 [hdrDebugInfo] 快照，供下播后查看。
+  void _startHdrSnapshot() {
+    _hdrSnapshotTimer?.cancel();
+    _hdrSnapshotTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_videoPlayerController == null) return;
+      final info = hdrDebugInfo;
+      _lastHdrSnapshot = info;
+      debugPrint('[HDR] snapshot\n$info');
+    });
+  }
+
   /// 设置页修改 HDR / 杜比视界选项后调用，使参数立即作用于当前播放器。
   void applyHdrOptions() {
     final player = _videoPlayerController;
     if (player == null) return;
-    _applyHdrProperties(player);
+    _applyHdrProperties(player, hdrSurface: _hdrSurface);
   }
+
+  /// 是否正在使用 Android SurfaceView 出画（HDR 片源专用）。
+  bool _hdrSurface = false;
 
   /// 写入 mpv 的 HDR 色彩处理参数。
   ///
-  /// 这里只改 `--tone-mapping` / `--hdr-compute-peak` / `--target-peak`
-  /// 等运行期属性，不触碰 `--vo`：media_kit 依赖固定的视频输出驱动把画面
-  /// 交给 Flutter 纹理，替换 `--vo` 会导致黑屏。
-  void _applyHdrProperties(Player player) {
+  /// 只改色彩处理相关的运行期属性，不触碰 `--vo`：media_kit 依赖固定的
+  /// 视频输出驱动把画面交给 Flutter 纹理，随意替换 `--vo` 会黑屏；
+  /// SurfaceView 出画路径的 `--vo` 由 media_kit 的 Android 控制器负责。
+  void _applyHdrProperties(Player player, {bool hdrSurface = false}) {
     try {
       // 先复位再写入，确保关闭 HDR 后不会残留上一次的参数
       for (final entry in HdrConfig.resetProperties.entries) {
         player.setProperty(entry.key, entry.value);
       }
-      for (final entry in HdrConfig.fromPref().mpvProperties.entries) {
+      final properties = Map<String, String>.from(
+        HdrConfig.fromPref().mpvProperties,
+      );
+      if (hdrSurface) {
+        // 走 SurfaceView 时请求 10bit / HDR 输出；渲染后端不支持时会被忽略。
+        properties['target-colorspace-hint'] = 'yes';
+      }
+      debugPrint('[HDR] properties: $properties');
+      for (final entry in properties.entries) {
         player.setProperty(entry.key, entry.value);
       }
     } catch (_) {
@@ -1251,6 +1346,18 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       opt['autosync'] = autosync;
     }
 
+    // HDR 片源在 Android 上改用 SurfaceView 出画：Flutter 纹理固定为
+    // RGBA8888，会把 10bit / HDR 元数据丢掉，SurfaceView 才能让 libmpv
+    // 申请 10bit 的 EGL 表面并经 target-colorspace-hint 激发面板 HDR。
+    _hdrSurface = Platform.isAndroid &&
+        Pref.enableHdr &&
+        (isHdrSource || hasHdrStream);
+    debugPrint(
+      '[HDR] init: enable=${Pref.enableHdr} hdrSource=$isHdrSource '
+      'hasHdrStream=$hasHdrStream surface=$_hdrSurface '
+      'vo=${_hdrSurface ? 'gpu-next' : '-'}',
+    );
+
     final player = await Player.create(
       configuration: PlayerConfiguration(
         logLevel: kDebugMode ? .warn : .error,
@@ -1258,8 +1365,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       ),
     );
 
+    // 渲染后端出错（例如 EGL 10bit 配置创建失败）会在这里出现，便于排查黑屏
+    player.stream.error.listen((event) {
+      debugPrint('[HDR][mpv-error] $event');
+    });
+
     // HDR / 杜比视界：必须在视频输出初始化前写入，vo 创建时才会读取这些参数
-    _applyHdrProperties(player);
+    _applyHdrProperties(player, hdrSurface: _hdrSurface);
 
     assert(_videoController == null);
 
@@ -1269,6 +1381,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         enableHardwareAcceleration: hwdec != null,
         androidAttachSurfaceAfterVideoParameters: false,
         hwdec: hwdec,
+        androidSurfaceView: _hdrSurface,
+        // HDR 片源的渲染后端可在设置里切换（gpu-next / gpu / mediacodec_embed），
+        // 不同设备驱动对 10bit EGL 的支持差异很大。
+        vo: _hdrSurface ? HdrBackend.fromValue(Pref.hdrBackend).value : null,
       ),
     );
 
@@ -1344,6 +1460,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
 
     assert(!isLive || seekTo == null);
+    // 按当前片源重新落一次 --hwdec：切换画质时播放器不会重建，
+    // 旧的直通解码会让 HDR 色调映射静默失效。file-local-options 只作用于
+    // 接下来加载的这一个文件，不会污染后续播放。
+    if (_resolveHwdec() case final hwdec?) {
+      player.setProperty('file-local-options/hwdec', hwdec);
+    }
     await player.open(
       Media(
         video,
@@ -1353,6 +1475,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       play: false,
     );
     applyVideoPictureParameters(player);
+    debugPrint(
+      '[HDR] open: hdrSource=$isHdrSource surface=$_hdrSurface '
+      'hwdec=${_resolveHwdec()} platform=${Platform.isAndroid ? 'android' : 'desktop'}',
+    );
+    _startHdrSnapshot();
   }
 
   Future<void>? refreshPlayer() {
@@ -2675,6 +2802,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   void dispose() {
+    _hdrSnapshotTimer?.cancel();
+    // 销毁前抓一次最终状态，设置页之后仍能回看
+    if (_videoPlayerController != null) {
+      final info = hdrDebugInfo;
+      if (!info.contains('播放器尚未初始化')) _lastHdrSnapshot = info;
+    }
     _cancelAutoAudioOnlyTimer();
     _interruptAutoAudioRestore();
     _autoAudioState = AutoAudioOnlyState.idle;

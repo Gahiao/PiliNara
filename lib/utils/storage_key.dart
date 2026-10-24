@@ -21,6 +21,7 @@ abstract final class SettingBoxKey {
       hdrTargetPeak = 'hdrTargetPeak',
       hdrComputePeak = 'hdrComputePeak',
       hdrHwdecMode = 'hdrHwdecMode',
+      hdrBackend = 'hdrBackend',
       dolbyVisionFallback = 'dolbyVisionFallback',
       audioOutput = 'audioOutput',
       bufferSize = 'bufferSize',

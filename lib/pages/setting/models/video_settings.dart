@@ -78,9 +78,23 @@ List<SettingsModel> get videoSettings => [
     leading: const Icon(Icons.memory_outlined),
     getSubtitle: () {
       final mode = HdrHwdecMode.fromValue(Pref.hdrHwdecMode);
-      return '当前：${mode.label}。${mode.desc}（重新打开视频生效）';
+      return '当前：${mode.label}。${mode.desc}（切换画质或重开视频时生效）';
     },
     onTap: _showHdrHwdecDialog,
+  ),
+  NormalModel(
+    title: 'HDR 渲染后端',
+    leading: const Icon(Icons.tune),
+    getSubtitle: () {
+      final backend = HdrBackend.fromValue(Pref.hdrBackend);
+      final desc = switch (backend) {
+        HdrBackend.gpuNext => 'libplacebo 渲染，唯一支持 target-colorspace-hint',
+        HdrBackend.gpu => '兼容性好，但通常无法激发 HDR',
+        HdrBackend.mediacodecEmbed => '解码器直接送显，HDR 由系统直通，不走 mpv 渲染',
+      };
+      return '当前：${backend.label}。$desc（重新打开视频生效）';
+    },
+    onTap: _showHdrBackendDialog,
   ),
   SwitchModel(
     title: '杜比视界兼容模式',
@@ -88,6 +102,12 @@ List<SettingsModel> get videoSettings => [
     leading: const Icon(Icons.brightness_high),
     setKey: SettingBoxKey.dolbyVisionFallback,
     defaultVal: false,
+  ),
+  NormalModel(
+    title: 'HDR 状态诊断',
+    subtitle: '查看当前片源的 mpv 色彩、解码方式与色调映射参数，用于排查 HDR 不生效',
+    leading: const Icon(Icons.bug_report),
+    onTap: _showHdrDebugDialog,
   ),
   const SwitchModel(
     title: '免登录1080P',
@@ -743,6 +763,49 @@ void _showLiveBufferSecDialog(BuildContext context, VoidCallback setState) =>
       suffix: 's',
     );
 
+Future<void> _showHdrBackendDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final res = await showDialog<String>(
+    context: context,
+    builder: (context) => SelectDialog<String>(
+      title: 'HDR 渲染后端',
+      value: Pref.hdrBackend,
+      values: HdrBackend.values.map((e) => (e.value, e.label)).toList(),
+    ),
+  );
+  if (res != null) {
+    await GStorage.setting.put(SettingBoxKey.hdrBackend, res);
+    SmartDialog.showToast('重新打开视频后生效');
+    setState();
+  }
+}
+
+Future<void> _showHdrDebugDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final info =
+      PlPlayerController.instance?.hdrDebugInfo ??
+      PlPlayerController.lastHdrInfo;
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('HDR 状态诊断'),
+      content: SingleChildScrollView(
+        child: SelectableText(
+          info,
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: Get.back, child: const Text('关闭')),
+      ],
+    ),
+  );
+}
+
 Future<void> _showHdrOutputModeDialog(
   BuildContext context,
   VoidCallback setState,
@@ -828,7 +891,7 @@ Future<void> _showHdrHwdecDialog(
   );
   if (res != null) {
     await GStorage.setting.put(SettingBoxKey.hdrHwdecMode, res);
-    SmartDialog.showToast('重新打开视频后生效');
+    SmartDialog.showToast('切换画质或重开视频后生效');
     setState();
   }
 }

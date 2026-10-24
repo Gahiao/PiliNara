@@ -1304,11 +1304,9 @@ packages:
   media_kit_video:
     dependency: "direct main"
     description:
-      path: media_kit_video
-      ref: upstream
-      resolved-ref: "965529ec4954a8915ea96e1bc4a7684d8cf520bd"
-      url: "https://github.com/Starfallan/media-kit.git"
-    source: git
+      path: "third_party/media_kit_video"
+      relative: true
+    source: path
     version: "2.0.1"
   meta:
     dependency: transitive

@@ -1327,9 +1327,13 @@ abstract final class Pref {
   static bool get hdrComputePeak =>
       _setting.get(SettingBoxKey.hdrComputePeak, defaultValue: true);
 
-  /// HDR 解码方式（follow / copy / direct），见 HdrHwdecMode。
+  /// HDR 解码方式（auto / follow / copy / direct），见 HdrHwdecMode。
   static String get hdrHwdecMode =>
-      _setting.get(SettingBoxKey.hdrHwdecMode, defaultValue: 'follow');
+      _setting.get(SettingBoxKey.hdrHwdecMode, defaultValue: 'auto');
+
+  /// HDR 渲染后端（gpu-next / gpu / mediacodec_embed），见 HdrBackend。
+  static String get hdrBackend =>
+      _setting.get(SettingBoxKey.hdrBackend, defaultValue: 'gpu-next');
 
   /// 杜比视界兼容模式：硬件解码器无法处理 DoVi 元数据时回退到 HDR10 片源。
   static bool get dolbyVisionFallback =>

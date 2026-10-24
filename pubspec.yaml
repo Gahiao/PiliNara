@@ -231,11 +231,10 @@ dependency_overrides:
       url: https://github.com/Starfallan/media-kit.git
       path: media_kit_native_event_loop
       ref: upstream
+  # 内置 fork：Android 增加 SurfaceView 出画路径以支持真 HDR。
+  # 见 docs/hdr-native-plan.md；上游为 Starfallan/media-kit 的 media_kit_video。
   media_kit_video:
-    git:
-      url: https://github.com/Starfallan/media-kit.git
-      path: media_kit_video
-      ref: upstream
+    path: third_party/media_kit_video
 
 dev_dependencies:
   flutter_test:
