@@ -83,18 +83,20 @@ List<SettingsModel> get extraSettings => [
         .put(SettingBoxKey.pgcSkipType, value.index)
         .whenComplete(setState),
   ),
-  const SplitModel(
-    normalModel: NormalModel.split(
-      title: "BV跳转",
-      subtitle: "检测剪切板中的BV号并自动跳转",
-      leading: Icon(MdiIcons.motionPlayOutline),
+  if (Platform.isAndroid) ...[
+    const SplitModel(
+      normalModel: NormalModel.split(
+        title: "BV跳转",
+        subtitle: "检测剪切板中的BV号并自动跳转",
+        leading: Icon(MdiIcons.motionPlayOutline),
+      ),
+      switchModel: SwitchModel.split(
+        setKey: SettingBoxKey.bvJump,
+        defaultVal: false,
+        onTap: showBvSwitchDialog,
+      ),
     ),
-    switchModel: SwitchModel.split(
-      setKey: SettingBoxKey.bvJump,
-      defaultVal: false,
-      onTap: showBvSwitchDialog,
-    ),
-  ),
+  ],
   const SwitchModel(
     title: '禁用 SSL 证书验证',
     subtitle: '谨慎开启，禁用容易受到中间人攻击',

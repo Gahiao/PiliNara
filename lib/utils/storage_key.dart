@@ -258,7 +258,8 @@ abstract final class SettingBoxKey {
       showBvToast = 'showBvToast',
       jumpDirec = 'jumpDirec',
       bvJumpToastText = 'bvJumpToastText',
-      shouldJumpEveryTime = 'shouldJumpEveryTime';
+      shouldJumpEveryTime = 'shouldJumpEveryTime',
+      bvJumpWaitSec = 'bvJumpWaitSec';
 }
 
 abstract final class LocalCacheKey {

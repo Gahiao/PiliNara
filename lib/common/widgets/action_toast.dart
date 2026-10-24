@@ -5,8 +5,17 @@ import 'package:material_ui/material_ui.dart';
 Future<bool> showActionToast({
   required String msg,
   required String actionText,
-  Duration time = const Duration(seconds: 5),
+  required Object? sec,
 }) async {
+  final parsed = switch (sec) {
+    int v => v,
+    num v => v.toInt(),
+    String v => int.tryParse(v.trim()) ?? 5,
+    _ => 5,
+  };
+  final seconds = parsed <= 0 ? 5 : (parsed > 10 ? 10 : parsed);
+  final time = Duration(seconds: seconds);
+
   SmartDialog.dismiss();
 
   final res = await SmartDialog.show<bool>(
