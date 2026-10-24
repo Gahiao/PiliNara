@@ -69,6 +69,7 @@ param(
     [string]$FlutterRoot,
     [string]$RepoRoot,
     [string]$OutDir,
+    [string]$DeviceSerial,
     [ValidateSet('apk', 'aab', 'both')]
     [string]$Target = 'apk',
     [switch]$Dev,
@@ -77,7 +78,7 @@ param(
     [string]$TargetPlatform,
     [switch]$Deploy,
     [string]$DeviceIp,
-    [string]$AppId = 'com.example.piliplus',
+    [string]$AppId = '',
     [int]$BuildNumber = 0,
     [switch]$SkipPatch,
     [switch]$SkipPubGet,
@@ -385,14 +386,16 @@ try {
         Write-Ok ("{0} ({1:N1} MB)" -f $dest, ((Get-Item $dest).Length / 1MB))
     }
 
-    if ($Deploy) {
+        if ($Deploy) {
         Write-Step 'deploying over adb'
 
-        $adbCandidates = @(
-            (Join-Path $env:ANDROID_SDK_ROOT 'platform-tools\adb.exe'),
-            (Join-Path $env:ANDROID_HOME 'platform-tools\adb.exe'),
-            'E:\androidSDK\platform-tools\adb.exe',
-            (Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'))
+        $adbCandidates = @()
+        foreach ($sdkRoot in @($env:ANDROID_SDK_ROOT, $env:ANDROID_HOME, 'E:\androidSDK', (Join-Path $env:LOCALAPPDATA 'Android\Sdk'))) {
+            if (-not $sdkRoot) { continue }
+            $adbCandidates += (Join-Path $sdkRoot 'platform-tools\adb.exe')
+        }
+        $adbCandidates += 'C:\Users\fk\Desktop\pilinara-build\platform-tools\adb.exe'
+
         $adb = ''
         foreach ($candidate in $adbCandidates) {
             if ($candidate -and (Test-Path $candidate)) { $adb = $candidate; break }
@@ -413,25 +416,38 @@ try {
         }
 
         $devicesOutput = (Invoke-External -Exe $adb -Arguments @('devices') -WorkingDirectory $script:RepoRoot).Output
-        $readyDevice = ($devicesOutput -split "`n" | Where-Object { $_ -match '\sdevice$' } | Select-Object -First 1)
+        $readyDevices = @($devicesOutput -split "`n" | Where-Object { $_ -match '\sdevice$' })
 
-        if (-not $readyDevice) {
+        if ($readyDevices.Count -eq 0) {
             Write-Host $devicesOutput -ForegroundColor DarkGray
-            throw 'no device in "device" state; run adb pair / adb connect first, or pass -DeviceIp'
+            throw 'no device in "device" state; run adb connect first'
         }
-        Write-Ok ("device: {0}" -f $readyDevice.Trim())
+
+        $serial = ''
+        if ($DeviceSerial) { $serial = $DeviceSerial }
+        elseif ($readyDevices.Count -eq 1) { $serial = ($readyDevices[0] -split '\s+')[0] }
+        else {
+            Write-Host $devicesOutput -ForegroundColor DarkGray
+            throw 'more than one device; pass -DeviceSerial <serial> or disconnect the extra one'
+        }
+        Write-Ok ("device: {0}" -f $serial)
 
         $apkToInstall = $artifacts | Where-Object { $_ -match 'arm64' } | Select-Object -First 1
         if (-not $apkToInstall) { $apkToInstall = $artifacts | Select-Object -First 1 }
         if (-not $apkToInstall) { throw 'no apk to install' }
 
-        $install = Invoke-External -Exe $adb -Arguments @('install', '-r', $apkToInstall) -WorkingDirectory $script:RepoRoot -Echo
+        $install = Invoke-External -Exe $adb -Arguments @('-s', $serial, 'install', '-r', $apkToInstall) -WorkingDirectory $script:RepoRoot -Echo
         if ($install.Code -ne 0) { throw ("adb install failed:`n{0}" -f $install.Output) }
 
         $appIdReal = $AppId
-        if ($Dev) { $appIdReal += '.dev' }
+        if (-not $appIdReal) {
+            if ($DebugBuild) { $appIdReal = 'com.example.pilinara.debug' }
+            elseif ($Dev) { $appIdReal = 'com.example.pilinara.dev' }
+            else { $appIdReal = 'com.example.pilinara' }
+        }
+
         Invoke-External -Exe $adb `
-            -Arguments @('shell', 'monkey', '-p', $appIdReal, '-c', 'android.intent.category.LAUNCHER', '1') `
+            -Arguments @('-s', $serial, 'shell', 'monkey', '-p', $appIdReal, '-c', 'android.intent.category.LAUNCHER', '1') `
             -WorkingDirectory $script:RepoRoot | Out-Null
         Write-Ok ("launched {0}" -f $appIdReal)
     }

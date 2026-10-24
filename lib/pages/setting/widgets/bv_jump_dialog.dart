@@ -93,17 +93,17 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child:  TextField(
+                child: TextField(
                   controller: waitSec,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   maxLines: 1,
-                  maxLength: 3,
+                  maxLength: 2,
                   textInputAction: TextInputAction.done,
                   decoration: const InputDecoration(
                     labelText: '等待时间',
                     hintText: '5',
-                    helperText: '跳转前等待的秒数',
+                    helperText: '跳转前等待的秒数(1~10)',
                     counterText: '',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.all(Radius.circular(6)),
@@ -131,13 +131,24 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
               );
               await GStorage.setting.put(SettingBoxKey.shouldJumpEveryTime, false);
               textController.text = kToastTextDefault;
-              waitSec.text = kWaitSecDefault as String;
+              waitSec.text = kWaitSecDefault.toString();
               setState(() => subtreeKey = UniqueKey());
             },
             child: const Text('恢复默认'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, textController.text),
+            onPressed: () async {
+              var seconds = kWaitSecDefault;
+              final parsed = int.tryParse(waitSec.text.trim());
+              if (parsed != null && parsed > 0) {
+                seconds = parsed < 1 ? 1 : parsed;
+                seconds = parsed > 10 ? 10 : parsed;
+              }
+              await GStorage.setting.put(SettingBoxKey.bvJumpWaitSec, seconds);
+              if (context.mounted) {
+                Navigator.pop(context, textController.text);
+              }
+            },
             child: const Text('关闭'),
           ),
         ],
@@ -149,4 +160,5 @@ Future<void> showBvSwitchDialog(BuildContext context) async {
     await GStorage.setting.put(SettingBoxKey.bvJumpToastText, res);
   }
   textController.dispose();
+  waitSec.dispose();
 }
