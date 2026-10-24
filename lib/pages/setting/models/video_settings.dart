@@ -85,8 +85,9 @@ List<SettingsModel> get videoSettings => [
   SwitchModel(
     title: 'HDR 直通出画',
     subtitle:
-        'HDR / 杜比视界片源改用 Flutter 之下的 SurfaceView 直通送显（10bit + HDR 色彩模式），才能真正点亮面板 HDR；'
-        'SDR 片源仍走纹理。弹幕、控制栏等 Flutter 内容照常叠加。切换后需重新打开视频生效',
+        'HDR / 杜比视界片源改用 Flutter 之下的 SurfaceView 直通送显，由解码器直接输出 HDR；'
+        'SDR 片源仍走纹理，弹幕/控制栏照常叠加。切换后需重新打开视频生效。'
+        '若个别设备出现黑屏，请关闭此开关或开启「杜比视界兼容模式」后重开视频',
     leading: const Icon(Icons.hdr_strong),
     setKey: SettingBoxKey.hdrSurface,
     defaultVal: true,
