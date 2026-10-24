@@ -12,7 +12,6 @@ import 'package:media_kit_video/src/subtitle/subtitle_view.dart';
 import 'package:media_kit_video/media_kit_video_controls/media_kit_video_controls.dart'
     as media_kit_video_controls;
 import 'package:media_kit_video/src/utils/dispose_safe_notifer.dart';
-import 'package:media_kit_video/src/video/hdr_surface.dart';
 
 import 'package:media_kit_video/src/video_view_parameters.dart';
 import 'package:media_kit_video/src/video_controller/video_controller.dart';
@@ -363,11 +362,7 @@ class VideoState extends State<Video> with WidgetsBindingObserver {
                         return ValueListenableBuilder<Rect?>(
                           valueListenable: widget.controller.rect,
                           builder: (context, rect, _) {
-                            final surfaceView =
-                                widget.controller.usesAndroidSurfaceView;
-                            if ((id != null || surfaceView) &&
-                                rect != null &&
-                                _visible) {
+                            if (id != null && rect != null && _visible) {
                               return SizedBox(
                                 // Apply aspect ratio if provided.
                                 width: videoViewParameters.aspectRatio == null
@@ -379,29 +374,11 @@ class VideoState extends State<Video> with WidgetsBindingObserver {
                                   children: [
                                     const SizedBox(),
                                     Positioned.fill(
-                                      child: surfaceView
-                                          // HDR: rendered by a native
-                                          // SurfaceView (hybrid composition)
-                                          // instead of a Texture, so that
-                                          // 10-bit / HDR metadata survives.
-                                          ? MpvHdrSurface(
-                                              handle: widget
-                                                  .controller
-                                                  .player
-                                                  .handle,
-                                              tenBit:
-                                                  widget
-                                                      .controller
-                                                      .configuration
-                                                      .vo !=
-                                                  'mediacodec_embed',
-                                            )
-                                          : Texture(
-                                              textureId: id!,
-                                              filterQuality:
-                                                  videoViewParameters
-                                                      .filterQuality,
-                                            ),
+                                      child: Texture(
+                                        textureId: id,
+                                        filterQuality:
+                                            videoViewParameters.filterQuality,
+                                      ),
                                     ),
                                     // Keep the |Texture| hidden before the first frame renders. In native implementation, if no default frame size is passed (through VideoController), a starting 1 pixel sized texture/surface is created to initialize the render context & check for H/W support.
                                     // This is then resized based on the video dimensions & accordingly texture ID, texture, EGLDisplay, EGLSurface etc. (depending upon platform) are also changed. Just don't show that 1 pixel texture to the UI.

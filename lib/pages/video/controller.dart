@@ -971,14 +971,10 @@ class VideoDetailController extends GetxController
     Duration? seek = defaultST ?? playedTime;
     if (seek == .zero) seek = null;
     seek ??= getFirstSegment();
-    // HDR 片源需要拷贝解码，mpv 拿不到画面时色调映射/峰值亮度都不会生效
+    // HDR 片源需要拷贝解码，mpv 拿不到画面时色调映射/峰值亮度都不会生效。
+    // 同时它决定出画方式：HDR / 杜比视界走 SurfaceView 直通，SDR 走纹理。
     plPlayerController.isHdrSource =
         !isFileSource && firstVideo.quality.isHdr;
-    // 该视频是否提供 HDR / 杜比视界流。出画方式（SurfaceView）在播放器
-    // 创建时就固定了，不能只看当前选中画质，否则中途切到杜比视界不会生效。
-    plPlayerController.hasHdrStream =
-        !isFileSource &&
-        (data.dash?.video?.any((e) => e.quality.isHdr) ?? false);
     await plPlayerController.setDataSource(
       isFileSource
           ? FileSource(

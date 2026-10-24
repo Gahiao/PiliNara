@@ -1319,12 +1319,13 @@ abstract final class Pref {
   static String get hdrToneMapping =>
       _setting.get(SettingBoxKey.hdrToneMapping, defaultValue: 'auto');
 
-  /// 是否使用 SurfaceView 出画以触发真 HDR（实验，默认关闭）。
+  /// 是否使用 SurfaceView 直通出画以触发真 HDR（默认开启）。
   ///
-  /// hybrid composition 的原生 View 位于 Flutter 渲染层之上，弹幕、控制栏
-  /// 等 Flutter 叠加内容会被遮挡，并可能残留/黑屏，因此默认不启用。
+  /// 视频由 Flutter **之下**的原生 SurfaceView 输出，弹幕/控制栏仍由 Flutter
+  /// 绘制在其上方，因此不会遮挡。关闭后 HDR 片源也走 8bit 纹理（只做色调映射，
+  /// 无法点亮面板 HDR）。
   static bool get hdrSurface =>
-      _setting.get(SettingBoxKey.hdrSurface, defaultValue: false);
+      _setting.get(SettingBoxKey.hdrSurface, defaultValue: true);
 
   /// 目标峰值亮度（nits），`0` 表示自动。
   static int get hdrTargetPeak =>

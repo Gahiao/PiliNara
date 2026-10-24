@@ -30,33 +30,36 @@ class PipMiniVideoContent extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        ColoredBox(
-          color: Colors.black,
-          child: Obx(() {
-            final videoController = plPlayerController.videoController;
-            if (videoController == null) {
-              return const SizedBox.shrink();
-            }
-            final videoFit = plPlayerController.videoFit.value;
-            return Transform.flip(
-              flipX: plPlayerController.flipX.value,
-              flipY: plPlayerController.flipY.value,
+        Obx(() {
+          final videoController = plPlayerController.videoOutput.value;
+          final useNativeSurface = plPlayerController.useNativeSurface;
+          if (videoController == null && !useNativeSurface) {
+            return const SizedBox.shrink();
+          }
+          final videoFit = plPlayerController.videoFit.value;
+          return ColoredBox(
+            // HDR 直通时视频由 Flutter 之下的小窗 SurfaceView 输出，
+            // 这里必须透明，否则会把视频完全盖住。
+            color: useNativeSurface ? Colors.transparent : Colors.black,
+            child: Transform.flip(
+              flipX: useNativeSurface ? false : plPlayerController.flipX.value,
+              flipY: useNativeSurface ? false : plPlayerController.flipY.value,
               child: FittedBox(
                 fit: videoFit.boxFit,
                 clipBehavior: Clip.hardEdge,
-                child: plPlayerController.useNativeSurface
+                child: useNativeSurface
                     ? NativeVideoSurface(
                         controller: plPlayerController,
                         aspectRatio: videoFit.aspectRatio,
                       )
                     : SimpleVideo(
-                        controller: videoController,
+                        controller: videoController!,
                         aspectRatio: videoFit.aspectRatio,
                       ),
               ),
-            );
-          }),
-        ),
+            ),
+          );
+        }),
         if (danmuWidget != null)
           ListenableBuilder(
             listenable: transition,

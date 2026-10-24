@@ -143,7 +143,11 @@ class PLVideoPlayer extends StatefulWidget {
 class _PLVideoPlayerState extends State<PLVideoPlayer>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   late AnimationController _animationController;
-  late VideoController videoController;
+  VideoController? videoController;
+  VideoController? _maskVideoController;
+  StreamSubscription<dynamic>? _nativeModeSub;
+  StreamSubscription<VideoController?>? _videoOutputSub;
+  bool _disposed = false;
   late final CommonIntroController introController = widget.introController!;
   late final VideoDetailController videoDetailController =
       widget.videoDetailController!;
@@ -307,7 +311,27 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
         }
       });
     }
-    videoController = plPlayerController.videoController!;
+    videoController = plPlayerController.videoOutput.value;
+    _videoOutputSub = plPlayerController.videoOutput.listen((value) {
+      _onVideoOutputChanged(value);
+    });
+    // HDR 直通出画切换时清掉旋转/镜像：原生 SurfaceView 是独立图层，
+    // 无法跟随 Flutter 的 rotate/flip（会看到未翻转、未旋转的画面）。
+    _nativeModeSub = plPlayerController.nativeSurfaceMode.listen((enabled) {
+      if (!enabled) return;
+      // 初始值可能同步回调（此时还在 initState），延后到首帧再改状态。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _disposed) return;
+        _transformationController.value = Matrix4.identity();
+        if (plPlayerController.flipX.value) {
+          plPlayerController.flipX.value = false;
+        }
+        if (plPlayerController.flipY.value) {
+          plPlayerController.flipY.value = false;
+        }
+        setState(() {});
+      });
+    });
     _initDanmakuMask();
 
     if (PlatformUtils.isMobile) {
@@ -439,7 +463,10 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   @override
   void dispose() {
+    _disposed = true;
     removeObserverMobile(this);
+    _videoOutputSub?.cancel();
+    _nativeModeSub?.cancel();
     _danmakuListener?.cancel();
     _tapGestureRecognizer.dispose();
     _longPressRecognizer?.dispose();
@@ -1096,15 +1123,28 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     }
   }
 
+  /// 播放器因出画方式切换（SDR ↔ HDR）而重建时同步视频控制器。
+  void _onVideoOutputChanged(VideoController? next) {
+    if (!mounted || _disposed) return;
+    if (identical(next, videoController)) return;
+    _disposeDanmakuMask();
+    setState(() => videoController = next);
+    if (next != null) {
+      _initDanmakuMask();
+    }
+  }
+
   void _initDanmakuMask() {
-    final maskController =
-        widget.videoDetailController?.danmakuMaskController;
+    final videoController = this.videoController;
+    if (videoController == null) return;
+    final maskController = widget.videoDetailController?.danmakuMaskController;
     if (maskController == null || plPlayerController.isLive) return;
     final driver = _maskDriver = DanmakuMaskClipDriver(
       frame: maskController.frame,
       output: plPlayerController.danmakuMaskPath,
       readInputs: _readDanmakuMaskInputs,
     );
+    _maskVideoController = videoController;
     maskController.frame.addListener(driver.update);
     _transformationController.addListener(driver.update);
     videoController.rect.addListener(driver.update);
@@ -1119,10 +1159,12 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     final driver = _maskDriver;
     if (driver == null) return;
     _maskDriver = null;
-    widget.videoDetailController?.danmakuMaskController.frame
-        .removeListener(driver.update);
+    widget.videoDetailController?.danmakuMaskController.frame.removeListener(
+      driver.update,
+    );
     _transformationController.removeListener(driver.update);
-    videoController.rect.removeListener(driver.update);
+    _maskVideoController?.rect.removeListener(driver.update);
+    _maskVideoController = null;
     for (final subscription in _maskSubscriptions) {
       subscription.cancel();
     }
@@ -1132,7 +1174,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   DanmakuMaskInputs? _readDanmakuMaskInputs() {
     if (widget.isPipMode) return null;
-    final rect = videoController.rect.value;
+    final rect = videoController?.rect.value;
     // media_kit 在无画面时给 1×1 的 rect（SimpleVideo 用同一判据盖 fill 色）
     if (rect == null || rect.isEmpty || (rect.width <= 1 && rect.height <= 1)) {
       return null;
@@ -1718,12 +1760,15 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
             child: IgnorePointer(
               ignoring: !plPlayerController.enableDragSubtitle,
               child: Obx(
-                () => SubtitleView(
-                  controller: videoController,
-                  configuration: plPlayerController.subtitleConfig.value,
-                  enableDragSubtitle: plPlayerController.enableDragSubtitle,
-                  onUpdatePadding: plPlayerController.onUpdatePadding,
-                ),
+                () => videoController == null
+                    ? const SizedBox.shrink()
+                    : SubtitleView(
+                        controller: videoController!,
+                        configuration: plPlayerController.subtitleConfig.value,
+                        enableDragSubtitle:
+                            plPlayerController.enableDragSubtitle,
+                        onUpdatePadding: plPlayerController.onUpdatePadding,
+                      ),
               ),
             ),
           ),
@@ -2441,99 +2486,111 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
   }
 
   Widget get _videoWidget {
-    // 使用 LayoutBuilder 动态捕获当前渲染容器的真实约束。
-    // 在系统画中画（PiP）转场或拖动过程中，MediaQuery 更新可能不及时，
-    // 而 LayoutBuilder 提供的 Constraints 是最准确的。
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // 如果是在小窗模式下，或者当前容器具有有效的有限约束，则优先使用约束尺寸，
-        // 从而解决从系统 PiP 恢复到应用时渲染容器未及时由于 layout 变化而导致渲染异常的问题。
-        final bool useConstraints =
-            (widget.isPipMode ||
-            (constraints.maxWidth > 0 && constraints.maxWidth.isFinite));
+    // useNativeSurface 是 Rx：SDR ↔ HDR 切换（播放器重建）时视频控件要跟着换。
+    return Obx(() {
+      final useNativeSurface = plPlayerController.useNativeSurface;
+      final videoController = this.videoController;
+      // 使用 LayoutBuilder 动态捕获当前渲染容器的真实约束。
+      // 在系统画中画（PiP）转场或拖动过程中，MediaQuery 更新可能不及时，
+      // 而 LayoutBuilder 提供的 Constraints 是最准确的。
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          // 如果是在小窗模式下，或者当前容器具有有效的有限约束，则优先使用约束尺寸，
+          // 从而解决从系统 PiP 恢复到应用时渲染容器未及时由于 layout 变化而导致渲染异常的问题。
+          final bool useConstraints =
+              (widget.isPipMode ||
+              (constraints.maxWidth > 0 && constraints.maxWidth.isFinite));
 
-        final double currentWidth = useConstraints
-            ? constraints.maxWidth.clamp(0.0, double.infinity)
-            : maxWidth;
-        final double currentHeight = useConstraints
-            ? constraints.maxHeight.clamp(0.0, double.infinity)
-            : maxHeight;
+          final double currentWidth = useConstraints
+              ? constraints.maxWidth.clamp(0.0, double.infinity)
+              : maxWidth;
+          final double currentHeight = useConstraints
+              ? constraints.maxHeight.clamp(0.0, double.infinity)
+              : maxHeight;
 
-        // 确保容器至少有一个最小有效的尺寸，避免播放引擎初始化失败
-        final double finalWidth = currentWidth > 0
-            ? currentWidth
-            : (maxWidth > 0 ? maxWidth : 16.0);
-        final double finalHeight = currentHeight > 0
-            ? currentHeight
-            : (maxHeight > 0 ? maxHeight : 9.0);
+          // 确保容器至少有一个最小有效的尺寸，避免播放引擎初始化失败
+          final double finalWidth = currentWidth > 0
+              ? currentWidth
+              : (maxWidth > 0 ? maxWidth : 16.0);
+          final double finalHeight = currentHeight > 0
+              ? currentHeight
+              : (maxHeight > 0 ? maxHeight : 9.0);
 
-        return Container(
-          clipBehavior: .none,
-          width: finalWidth,
-          height: finalHeight,
-          // HDR 原生出画时视频在 Flutter 之下，这里必须保持透明，
-          // 否则不透明底色会把原生 SurfaceView 完全盖住（表现为黑屏）。
-          color: plPlayerController.useNativeSurface
-              ? Colors.transparent
-              : widget.fill,
-          child: Obx(
-            () => MouseInteractiveViewer(
-              scaleEnabled: !plPlayerController.controlsLock.value,
-              rotateEnabled: plPlayerController.enablePinchRotate,
-              pointerSignalFallback: _onPointerSignal,
-              onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-              onPointerPanZoomEnd: _onPointerPanZoomEnd,
-              onPointerDown: _onPointerDown,
-              onPointerUp: _onPointerUp,
-              onPointerCancel: _onPointerCancel,
-              onPanStart: _onPanStart,
-              onPanUpdate: _onPanUpdate,
-              onPanEnd: _onPanEnd,
-              onScaleUpdate: _onScaleUpdate,
-              scaleGestureRecognizer: _scaleGestureRecognizer,
-              panEnabled: false,
-              minScale: plPlayerController.enableShrinkVideoSize ? 0.75 : 1,
-              maxScale: 2.0,
-              boundaryMargin: plPlayerController.enableShrinkVideoSize
-                            ? const .all(double.infinity)
-                            : .zero,
-              panAxis: .aligned,
-              transformationController: _transformationController,
-              childKey: _videoKey,
-              child: RepaintBoundary(
-                key: _videoKey,
-                child: Obx(
-                  () {
-                    final videoFit = plPlayerController.videoFit.value;
-                    // 几何镜像：改这里的 FittedBox / flip / Transform 结构要同步 DanmakuMaskGeometry
-                    return Transform.flip(
-                      flipX: plPlayerController.flipX.value,
-                      flipY: plPlayerController.flipY.value,
-                      child: FittedBox(
-                        fit: videoFit.boxFit,
-                        alignment: widget.alignment,
-                        child: plPlayerController.useNativeSurface
-                            // HDR：视频由 Flutter 下方的原生 SurfaceView 输出，
-                            // 这里只保留同尺寸的透明占位。
-                            ? NativeVideoSurface(
-                                controller: plPlayerController,
-                                aspectRatio: videoFit.aspectRatio,
-                              )
-                            : SimpleVideo(
-                                controller: plPlayerController.videoController!,
-                                fill: widget.fill,
-                                aspectRatio: videoFit.aspectRatio,
-                              ),
-                      ),
-                    );
-                  },
+          return Container(
+            clipBehavior: .none,
+            width: finalWidth,
+            height: finalHeight,
+            // HDR 原生出画时视频在 Flutter 之下，这里必须保持透明，
+            // 否则不透明底色会把原生 SurfaceView 完全盖住（表现为黑屏）。
+            color: useNativeSurface ? Colors.transparent : widget.fill,
+            child: Obx(
+              () => MouseInteractiveViewer(
+                scaleEnabled: !plPlayerController.controlsLock.value,
+                // 原生 SurfaceView 是独立图层，无法跟随旋转；HDR 模式下禁用。
+                rotateEnabled:
+                    plPlayerController.enablePinchRotate && !useNativeSurface,
+                pointerSignalFallback: _onPointerSignal,
+                onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                onPointerPanZoomEnd: _onPointerPanZoomEnd,
+                onPointerDown: _onPointerDown,
+                onPointerUp: _onPointerUp,
+                onPointerCancel: _onPointerCancel,
+                onPanStart: _onPanStart,
+                onPanUpdate: _onPanUpdate,
+                onPanEnd: _onPanEnd,
+                onScaleUpdate: _onScaleUpdate,
+                scaleGestureRecognizer: _scaleGestureRecognizer,
+                panEnabled: false,
+                minScale: plPlayerController.enableShrinkVideoSize ? 0.75 : 1,
+                maxScale: 2.0,
+                boundaryMargin: plPlayerController.enableShrinkVideoSize
+                    ? const .all(double.infinity)
+                    : .zero,
+                panAxis: .aligned,
+                transformationController: _transformationController,
+                childKey: _videoKey,
+                child: RepaintBoundary(
+                  key: _videoKey,
+                  child: Obx(
+                    () {
+                      final videoFit = plPlayerController.videoFit.value;
+                      // 几何镜像：改这里的 FittedBox / flip / Transform 结构要同步 DanmakuMaskGeometry
+                      return Transform.flip(
+                        // 镜像同样无法作用到原生 SurfaceView，HDR 模式下由控制器重置。
+                        flipX: useNativeSurface
+                            ? false
+                            : plPlayerController.flipX.value,
+                        flipY: useNativeSurface
+                            ? false
+                            : plPlayerController.flipY.value,
+                        child: FittedBox(
+                          fit: videoFit.boxFit,
+                          alignment: widget.alignment,
+                          child: useNativeSurface
+                              // HDR：视频由 Flutter 下方的原生 SurfaceView 输出，
+                              // 这里只保留同尺寸的透明占位。
+                              ? NativeVideoSurface(
+                                  controller: plPlayerController,
+                                  aspectRatio: videoFit.aspectRatio,
+                                )
+                              : videoController == null
+                              ? const SizedBox.shrink()
+                              : SimpleVideo(
+                                  controller: videoController,
+                                  fill: widget.fill,
+                                  aspectRatio: videoFit.aspectRatio,
+                                ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+    });
   }
 
   Future<void> _screenshotWebp() async {

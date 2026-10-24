@@ -78,16 +78,19 @@ List<SettingsModel> get videoSettings => [
     leading: const Icon(Icons.memory_outlined),
     getSubtitle: () {
       final mode = HdrHwdecMode.fromValue(Pref.hdrHwdecMode);
-      return '当前：${mode.label}。${mode.desc}';
+      return '当前：${mode.label}。${mode.desc}（切换画质或重开视频生效）';
     },
     onTap: _showHdrHwdecDialog,
   ),
   SwitchModel(
-    title: 'HDR 直通出画（实验）',
-    subtitle: '用 SurfaceView 直接送显以触发面板 HDR。代价：弹幕、控制栏等 Flutter 叠加内容会被遮挡，可能出现黑屏/残留，默认关闭',
+    title: 'HDR 直通出画',
+    subtitle:
+        'HDR / 杜比视界片源改用 Flutter 之下的 SurfaceView 直通送显（10bit + HDR 色彩模式），才能真正点亮面板 HDR；'
+        'SDR 片源仍走纹理。弹幕、控制栏等 Flutter 内容照常叠加。切换后需重新打开视频生效',
     leading: const Icon(Icons.hdr_strong),
     setKey: SettingBoxKey.hdrSurface,
-    defaultVal: false,
+    defaultVal: true,
+    onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
   ),
   NormalModel(
     title: 'HDR 渲染后端',
@@ -95,11 +98,13 @@ List<SettingsModel> get videoSettings => [
     getSubtitle: () {
       final backend = HdrBackend.fromValue(Pref.hdrBackend);
       final desc = switch (backend) {
-        HdrBackend.gpuNext => 'libplacebo 渲染，唯一支持 target-colorspace-hint',
-        HdrBackend.gpu => '兼容性好，但通常无法激发 HDR',
-        HdrBackend.mediacodecEmbed => '解码器直接送显，HDR 由系统直通，不走 mpv 渲染',
+        HdrBackend.gpuNext =>
+          'libplacebo 渲染，可尝试 target-colorspace-hint；当前 libmpv 构建通常无法真正输出 HDR',
+        HdrBackend.gpu => '兼容性好，但几乎无法激发 HDR',
+        HdrBackend.mediacodecEmbed =>
+          '解码器直接送显，HDR 由系统直通。唯一确定能点亮 HDR 的后端，需要开启硬解',
       };
-      return '当前：${backend.label}。$desc';
+      return '当前：${backend.label}。$desc（重新打开视频生效）';
     },
     onTap: _showHdrBackendDialog,
   ),
@@ -784,6 +789,7 @@ Future<void> _showHdrBackendDialog(
   );
   if (res != null) {
     await GStorage.setting.put(SettingBoxKey.hdrBackend, res);
+    SmartDialog.showToast('重新打开视频后生效');
     setState();
   }
 }
@@ -897,6 +903,7 @@ Future<void> _showHdrHwdecDialog(
   );
   if (res != null) {
     await GStorage.setting.put(SettingBoxKey.hdrHwdecMode, res);
+    SmartDialog.showToast('切换画质或重新打开视频后生效');
     setState();
   }
 }

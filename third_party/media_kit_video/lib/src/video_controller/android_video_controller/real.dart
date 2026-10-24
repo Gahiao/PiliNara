@@ -26,10 +26,6 @@ class AndroidVideoController extends PlatformVideoController {
   /// Whether [AndroidVideoController] is supported on the current platform or not.
   static bool get supported => Platform.isAndroid;
 
-  /// Whether this controller renders into a native Android `SurfaceView`.
-  @override
-  bool get usesAndroidSurfaceView => configuration.androidSurfaceView;
-
   /// Pointer address to the global object reference of `android.view.Surface` i.e. `(intptr_t)(*android.view.Surface)`.
   final ValueNotifier<int?> wid = ValueNotifier<int?>(null);
 
@@ -45,9 +41,9 @@ class AndroidVideoController extends PlatformVideoController {
   /// Listener for updating the --wid property.
   Future<void> widListener() {
     return lock.synchronized(() async {
-      if (configuration.androidSurfaceView) {
-        // SurfaceView path: `--wid` / `--android-surface-size` are applied by
-        // [_applySurfaceView] using the real surface size reported by native.
+      if (configuration.androidExternalSurface) {
+        // The host app owns the surface and assigns `--wid` itself
+        // (see PiliNara's VideoSurfaceHost); media_kit must not touch it.
         return;
       }
       final width = rect.value?.width.toInt() ?? 1;
@@ -59,62 +55,19 @@ class AndroidVideoController extends PlatformVideoController {
       final vidValue = widValue == '0' ? 'no' : 'auto';
       // It is important to re-initialize --vo after --android-surface-size.
       player.setProperty('vo', 'null');
-      setProperties(
-        {
-          // ORDER IS IMPORTANT.
-          'android-surface-size': androidSurfaceSizeValue,
-          'wid': widValue,
-          'vo': voValue,
-          // It is important to re-initialize --vid in-case of --vo=mediacodec_embed.
-          // Not doing so causes error "Could not open codec." & video never gets rendered.
-          if (configuration.vo == 'mediacodec_embed') 'vid': vidValue,
-        },
-      );
+      setProperties({
+        // ORDER IS IMPORTANT.
+        'android-surface-size': androidSurfaceSizeValue,
+        'wid': widValue,
+        'vo': voValue,
+        // It is important to re-initialize --vid in-case of --vo=mediacodec_embed.
+        // Not doing so causes error "Could not open codec." & video never gets rendered.
+        if (configuration.vo == 'mediacodec_embed') 'vid': vidValue,
+      });
       // Instead of seeking to the start (Duration.zero), seek to the current playback position
       // without jumping the user to the start of the media.
       final currentPosition = player.state.position;
       await player.seek(currentPosition);
-    });
-  }
-
-  /// Applies the native `SurfaceView`'s surface to libmpv.
-  ///
-  /// `--android-surface-size` must be the real surface size (reported by
-  /// `SurfaceHolder.Callback`), not the video size, because libmpv renders
-  /// directly into this surface.
-  Future<void> _applySurfaceView(int? wid, int width, int height) {
-    return lock.synchronized(() async {
-      debugPrint(
-        '[HDR] applySurfaceView wid=$wid size=${width}x$height '
-        'vo=${configuration.vo}',
-      );
-      if (wid == null || wid == 0 || width <= 0 || height <= 0) {
-        debugPrint('[HDR] applySurfaceView skipped (invalid wid/size)');
-        return;
-      }
-      // It is important to re-initialize --vo after --android-surface-size.
-      player.setProperty('vo', 'null');
-      final vo = configuration.vo ?? 'gpu';
-      setProperties({
-        // ORDER IS IMPORTANT.
-        'android-surface-size': '${width}x$height',
-        'wid': wid.toString(),
-        'vo': vo,
-        // mediacodec_embed 由解码器直接输出到 Surface，需要重新启用 --vid。
-        if (vo == 'mediacodec_embed') 'vid': 'auto',
-      });
-      debugPrint('[HDR] applySurfaceView applied vo=$vo wid=$wid');
-      // Seek to the current position so the new vo starts rendering without
-      // jumping back to the beginning of the media.
-      await player.seek(player.state.position);
-    });
-  }
-
-  Future<void> _detachSurfaceView() {
-    return lock.synchronized(() async {
-      debugPrint('[HDR] detachSurfaceView');
-      player.setProperty('vo', 'null');
-      setProperties({'wid': '0'});
     });
   }
 
@@ -138,11 +91,12 @@ class AndroidVideoController extends PlatformVideoController {
         }
 
         final isZero = width == 0 || height == 0;
-        final isSame = width == rect.value?.width.toInt() &&
+        final isSame =
+            width == rect.value?.width.toInt() &&
             height == rect.value?.height.toInt();
         if (isZero || isSame) return;
 
-        if (!configuration.androidSurfaceView) {
+        if (!configuration.androidExternalSurface) {
           await _channel.invokeMethod('VideoOutputManager.SetSurfaceSize', {
             'handle': player.handle.toString(),
             'width': width.toString(),
@@ -185,7 +139,7 @@ class AndroidVideoController extends PlatformVideoController {
     // Store the [VideoController] in the [_controllers].
     _controllers[handle] = controller;
 
-    if (!configuration.androidSurfaceView) {
+    if (!configuration.androidExternalSurface) {
       await _channel.invokeMethod('VideoOutputManager.Create', {
         'handle': handle.toString(),
       });
@@ -194,7 +148,8 @@ class AndroidVideoController extends PlatformVideoController {
     controller.setProperties({
       // It is necessary to set vo=null here to avoid SIGSEGV, --wid must be assigned before vo=gpu is set.
       'vo': 'null',
-      'hwdec': configuration.hwdec ??
+      'hwdec':
+          configuration.hwdec ??
           (configuration.enableHardwareAcceleration ? 'auto-safe' : 'no'),
       'vid': 'auto',
       'opengl-es': 'yes',
@@ -232,7 +187,7 @@ class AndroidVideoController extends PlatformVideoController {
     await videoParamsSubscription?.cancel();
     final handle = player.handle;
     _controllers.remove(handle);
-    if (!configuration.androidSurfaceView) {
+    if (!configuration.androidExternalSurface) {
       await _channel.invokeMethod('VideoOutputManager.Dispose', {
         'handle': handle.toString(),
       });
@@ -267,23 +222,6 @@ class AndroidVideoController extends PlatformVideoController {
                     ctr.id.value = args['id'] as int;
                     ctr.wid.value = args['wid'] as int;
                   }
-                  break;
-                }
-              case 'HdrSurface.SurfaceCreated':
-              case 'HdrSurface.SurfaceChanged':
-                {
-                  final ctr = _controllers[args['handle'] as int];
-                  ctr?._applySurfaceView(
-                    (args['wid'] as num?)?.toInt(),
-                    (args['width'] as num?)?.toInt() ?? 0,
-                    (args['height'] as num?)?.toInt() ?? 0,
-                  );
-                  break;
-                }
-              case 'HdrSurface.SurfaceDestroyed':
-                {
-                  final ctr = _controllers[args['handle'] as int];
-                  ctr?._detachSurfaceView();
                   break;
                 }
             }

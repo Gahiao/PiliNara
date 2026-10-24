@@ -17,14 +17,20 @@ class MainActivity : AudioServiceActivity() {
 
     /**
      * 透明背景模式：让 Flutter 的 surface 支持逐像素透明且 Z 序置顶，
-     * 这样播放页可以把视频 SurfaceView 放在 Flutter 之下，
-     * 弹幕/控件等 Flutter UI 仍然绘制在视频之上（HDR 直通方案的基础）。
+     * 这样播放页可以把 HDR 视频的 SurfaceView 放在 Flutter 之下，
+     * 弹幕/控件等 Flutter UI 仍然绘制在视频之上。
+     *
+     * 只有 HDR 直通出画需要它；窗口背景已在 NormalTheme / onCreate 中固定为黑色，
+     * 因此不会出现透白闪烁。
      */
     override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode =
         FlutterActivityLaunchConfigs.BackgroundMode.transparent
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        videoSurfaceHost?.release()
+        videoSurfaceHost = null
 
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "PiliNara")
         methodChannel.setMethodCallHandler { call, result ->
@@ -33,35 +39,61 @@ class MainActivity : AudioServiceActivity() {
             }
         }
 
-        // 视频底层（SurfaceView）控制通道
-        val surfaceChannel =
-            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.pilinara/video_surface")
+        // HDR 视频底层（SurfaceView）控制通道
+        val surfaceChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.pilinara/video_surface",
+        )
+        val host = VideoSurfaceHost(this, surfaceChannel)
+        videoSurfaceHost = host
+
         surfaceChannel.setMethodCallHandler { call, result ->
-            val host = videoSurfaceHost
-                ?: VideoSurfaceHost(this, surfaceChannel).also { videoSurfaceHost = it }
-            fun arg(name: String): Int =
+            fun intArg(name: String): Int =
                 (call.argument<Any>(name) as? Number)?.toInt() ?: 0
+            fun boolArg(name: String): Boolean =
+                call.argument<Any>(name) as? Boolean ?: false
 
             when (call.method) {
                 "create" -> {
-                    host.create()
+                    host.create(
+                        owner = intArg("owner"),
+                        left = intArg("x"),
+                        top = intArg("y"),
+                        width = intArg("width"),
+                        height = intArg("height"),
+                        wantTenBit = boolArg("tenBit"),
+                    )
                     result.success(null)
                 }
                 "setRect" -> {
-                    host.setRect(arg("x"), arg("y"), arg("width"), arg("height"))
+                    host.setRect(
+                        owner = intArg("owner"),
+                        left = intArg("x"),
+                        top = intArg("y"),
+                        width = intArg("width"),
+                        height = intArg("height"),
+                    )
+                    result.success(null)
+                }
+                "setHdr" -> {
+                    host.setHdr(owner = intArg("owner"), hdr = boolArg("hdr"))
                     result.success(null)
                 }
                 "remove" -> {
-                    host.remove()
+                    host.remove(owner = intArg("owner"))
                     result.success(null)
                 }
+                "capture" -> host.capture(
+                    owner = intArg("owner"),
+                    result = result,
+                )
                 else -> result.notImplemented()
             }
         }
     }
 
     override fun onDestroy() {
-        videoSurfaceHost?.remove()
+        videoSurfaceHost?.release()
         videoSurfaceHost = null
         super.onDestroy()
     }
@@ -76,7 +108,7 @@ class MainActivity : AudioServiceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // 透明 Flutter surface 下，未被 Flutter 绘制的区域会露出窗口背景，
-        // 统一给黑色，避免出现闪烁/花屏。
+        // 统一给黑色，避免出现白色闪烁。
         window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode =

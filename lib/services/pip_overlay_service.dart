@@ -731,6 +731,9 @@ class _PipWidgetState extends State<PipWidget>
     return Obx(() {
       final screenSize = MediaQuery.of(context).size;
       final bool isNative = PipOverlayService.isNativePip;
+      // HDR 直通时视频在 Flutter 之下，任何不透明底色都会盖住它。
+      final bool nativeSurface =
+          PipOverlayService._savedPlayerController?.useNativeSurface ?? false;
 
       // 系统 PiP 模式下直接铺满窗口，且不执行任何自定义尺寸/位置计算：此时
       // MediaQuery 给出的是系统 PiP 窗口自身的尺寸（非整屏），若照常钳制会把
@@ -739,7 +742,7 @@ class _PipWidgetState extends State<PipWidget>
       if (isNative) {
         return Positioned.fill(
           child: ColoredBox(
-            color: Colors.black,
+            color: nativeSurface ? Colors.transparent : Colors.black,
             child: AbsorbPointer(
               child: widget.videoPlayerBuilder(
                 true,
@@ -864,7 +867,11 @@ class _PipWidgetState extends State<PipWidget>
                           width: rect.width,
                           height: rect.height,
                           decoration: BoxDecoration(
-                            color: Colors.black,
+                            // HDR 直通时视频在小窗 SurfaceView 上，底色必须透明，
+                            // 否则会把整块视频盖成黑色。
+                            color: nativeSurface
+                                ? Colors.transparent
+                                : Colors.black,
                             borderRadius: BorderRadius.circular(radius),
                             boxShadow: [
                               BoxShadow(

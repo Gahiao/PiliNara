@@ -35,13 +35,6 @@ abstract class PlatformVideoController {
   /// [Rect] of the video output, received from the native implementation.
   final ValueNotifier<Rect?> rect = ValueNotifier<Rect?>(null);
 
-  /// Whether the video is rendered into a native Android `SurfaceView`
-  /// (hybrid composition) instead of a Flutter [Texture].
-  ///
-  /// Callers should render a platform view instead of a `Texture` when this
-  /// is `true`; see `VideoControllerConfiguration.androidSurfaceView`.
-  bool get usesAndroidSurfaceView => false;
-
   /// {@macro platform_video_controller}
   PlatformVideoController(this.player, this.configuration);
 
@@ -131,16 +124,19 @@ class VideoControllerConfiguration {
   /// * [vo] != gpu : `false`
   final bool? androidAttachSurfaceAfterVideoParameters;
 
-  /// Whether Android video output should be rendered into a native
-  /// `SurfaceView` (hybrid composition) instead of a `Texture`.
+  /// Whether the Android video output surface is provided by the host app.
   ///
-  /// A `SurfaceTexture` is always composited by Flutter as RGBA8888, which
-  /// silently drops HDR metadata. Enabling this allows libmpv to request a
-  /// 10-bit / HDR EGL surface through `--target-colorspace-hint`, so that
-  /// HDR / Dolby Vision playback can actually trigger the display's HDR mode.
+  /// media_kit normally creates a `TextureRegistry.SurfaceTextureEntry` and
+  /// renders into it. A `SurfaceTexture` is always composited by Flutter as
+  /// RGBA8888, which silently drops HDR metadata. When this is `true`,
+  /// media_kit does not create a texture; the app owns a native `SurfaceView`
+  /// and assigns its `--wid` itself (see PiliNara's `VideoSurfaceHost`).
+  ///
+  /// The app is responsible for setting `vo` / `wid` /
+  /// `android-surface-size` when the surface is ready.
   ///
   /// Only supported on Android. Default: `false`
-  final bool androidSurfaceView;
+  final bool androidExternalSurface;
 
   /// {@macro video_controller_configuration}
   const VideoControllerConfiguration({
@@ -150,7 +146,7 @@ class VideoControllerConfiguration {
     this.height,
     this.enableHardwareAcceleration = true,
     this.androidAttachSurfaceAfterVideoParameters,
-    this.androidSurfaceView = false,
+    this.androidExternalSurface = false,
   });
 
   /// Returns a copy of this class with the given fields replaced by the new values.
@@ -162,18 +158,18 @@ class VideoControllerConfiguration {
     int? height,
     bool? enableHardwareAcceleration,
     bool? androidAttachSurfaceAfterVideoParameters,
-    bool? androidSurfaceView,
-  }) =>
-      VideoControllerConfiguration(
-        vo: vo ?? this.vo,
-        hwdec: hwdec ?? this.hwdec,
-        width: width ?? this.width,
-        height: height ?? this.height,
-        enableHardwareAcceleration:
-            enableHardwareAcceleration ?? this.enableHardwareAcceleration,
-        androidAttachSurfaceAfterVideoParameters:
-            androidAttachSurfaceAfterVideoParameters ??
-                this.androidAttachSurfaceAfterVideoParameters,
-        androidSurfaceView: androidSurfaceView ?? this.androidSurfaceView,
-      );
+    bool? androidExternalSurface,
+  }) => VideoControllerConfiguration(
+    vo: vo ?? this.vo,
+    hwdec: hwdec ?? this.hwdec,
+    width: width ?? this.width,
+    height: height ?? this.height,
+    enableHardwareAcceleration:
+        enableHardwareAcceleration ?? this.enableHardwareAcceleration,
+    androidAttachSurfaceAfterVideoParameters:
+        androidAttachSurfaceAfterVideoParameters ??
+        this.androidAttachSurfaceAfterVideoParameters,
+    androidExternalSurface:
+        androidExternalSurface ?? this.androidExternalSurface,
+  );
 }

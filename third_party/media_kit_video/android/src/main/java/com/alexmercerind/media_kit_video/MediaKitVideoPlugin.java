@@ -30,17 +30,6 @@ public class MediaKitVideoPlugin implements FlutterPlugin, MethodCallHandler {
         channel.setMethodCallHandler(this);
 
         videoOutputManager = new VideoOutputManager(flutterPluginBinding.getTextureRegistry());
-
-        // HDR SurfaceView output (hybrid composition). A SurfaceTexture is
-        // always RGBA8888, so HDR playback needs a real SurfaceView instead.
-        try {
-            flutterPluginBinding
-                .getPlatformViewRegistry()
-                .registerViewFactory("media_kit_video/hdr_surface", new HdrSurfaceViewFactory(channel));
-        } catch (Throwable e) {
-            e.printStackTrace();
-        }
-
     }
 
     @Override

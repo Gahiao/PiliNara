@@ -34,6 +34,7 @@ import 'package:PiliPlus/plugin/pl_player/models/speed_lock_hint.dart';
 import 'package:PiliPlus/plugin/pl_player/models/video_fit_type.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/danmaku_options.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/fullscreen.dart';
+import 'package:PiliPlus/plugin/pl_player/utils/native_video_surface_channel.dart';
 import 'package:PiliPlus/services/live_pip_overlay_service.dart';
 import 'package:PiliPlus/services/pip_overlay_service.dart';
 import 'package:PiliPlus/services/service_locator.dart';
@@ -63,6 +64,7 @@ import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:easy_debounce/easy_throttle.dart';
 import 'package:flutter/foundation.dart'
     show ValueNotifier, clampDouble, kDebugMode;
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:flutter/services.dart'
     show DeviceOrientation, HapticFeedback, KeyDownEvent;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -591,23 +593,43 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 当前片源是否为 HDR / 杜比视界流，由播放页在 setDataSource 前写入。
   bool isHdrSource = false;
 
-  /// 当前视频是否提供 HDR / 杜比视界流（即使当前选中的是 SDR 画质）。
-  /// 出画方式在播放器创建时固定，用它来决定是否走 SurfaceView。
-  bool hasHdrStream = false;
+  /// 是否应该走「视频在 Flutter 之下」的 SurfaceView 出画。
+  ///
+  /// 只有真正的 HDR 片源才需要它：Flutter 纹理固定 8bit，会丢掉 HDR 元数据；
+  /// 而 SDR 片源继续走纹理，保留硬解、Anime4K 等全部 mpv 渲染能力。
+  /// 出画方式在播放器创建时确定，片源切换（切换画质/换集）时由
+  /// [_switchOutputIfNeeded] 重建播放器。
+  bool get _wantNativeSurface =>
+      Platform.isAndroid &&
+      Pref.enableHdr &&
+      Pref.hdrSurface &&
+      isHdrSource &&
+      // mediacodec_embed 必须硬解；用户关掉硬解时退回纹理，避免黑屏。
+      (HdrBackend.fromValue(Pref.hdrBackend) != HdrBackend.mediacodecEmbed ||
+          Pref.enableHA);
 
-  late final String? hwdec = _resolveHwdec();
+  /// 原生 SurfaceView 出画开关。Rx 以便播放页在出画方式变化时立即重建视频控件。
+  final RxBool nativeSurfaceMode = false.obs;
+
+  /// 当前视频控制器（响应式）。播放器因出画方式变化而重建时，界面据此换源。
+  final Rxn<VideoController> videoOutput = Rxn<VideoController>();
+
+  bool get useNativeSurface => nativeSurfaceMode.value;
 
   /// 由 [HdrHwdecMode] 与片源类型决定最终使用的 `--hwdec`。
   ///
   /// 直通解码（如 Android 的 `mediacodec`）不会把画面交回 mpv，色调映射、
   /// 峰值亮度等 HDR 参数会全部无效；因此「自动」模式下 HDR 片源改用拷贝解码，
   /// SDR 片源仍沿用「硬解模式」的设置。
+  ///
+  /// `mediacodec_embed` 是例外：它必须由 MediaCodec 直接解码到 Surface，
+  /// 所以只要走这条 HDR 出画路径，就强制使用 `mediacodec`。
   String? _resolveHwdec() {
-    if (!Pref.enableHA) return null;
-    if (HdrBackend.fromValue(Pref.hdrBackend) == HdrBackend.mediacodecEmbed) {
-      // mediacodec_embed 由 MediaCodec 直接解码到 Surface，必须配合直通硬解。
+    final backend = HdrBackend.fromValue(Pref.hdrBackend);
+    if (_wantNativeSurface && backend == HdrBackend.mediacodecEmbed) {
       return 'mediacodec';
     }
+    if (!Pref.enableHA) return null;
     final config = HdrConfig.fromPref();
     if (!config.enabled) return Pref.hardwareDecoding;
     return switch (config.hwdecMode) {
@@ -1047,8 +1069,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       }
     }
 
+    final native = nativeSurfaceMode.value;
     return [
-      '出画路径: ${_hdrSurface ? 'SurfaceView' : 'Texture(8bit)'}',
+      '出画路径: ${native ? 'SurfaceView(HDR)' : 'Texture(8bit)'}',
+      if (native)
+        '原生 Surface: wid=${_nativeWid ?? '-'}，'
+            '渲染尺寸=${_nativeRenderSize == null ? '-' : '${_nativeRenderSize!.$1}x${_nativeRenderSize!.$2}'}',
       'vo: ${read('vo')}',
       'vo-configured: ${read('vo-configured')}',
       'hwdec-current: ${read('hwdec-current')}',
@@ -1062,7 +1088,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       'target-peak: ${read('target-peak')}',
       'target-colorspace-hint: ${read('target-colorspace-hint')}',
       'dither: ${read('dither')}',
-      'HDR 开关: ${Pref.enableHdr ? '开' : '关'}，片源判定: ${isHdrSource ? 'HDR' : 'SDR'}',
+      'HDR 开关: ${Pref.enableHdr ? '开' : '关'}，'
+          '直通出画: ${Pref.hdrSurface ? '开' : '关'}，'
+          '后端: ${Pref.hdrBackend}',
+      '片源判定: ${isHdrSource ? 'HDR / 杜比视界' : 'SDR'}',
     ].join('\n');
   }
 
@@ -1081,66 +1110,213 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   void applyHdrOptions() {
     final player = _videoPlayerController;
     if (player == null) return;
-    _applyHdrProperties(player, hdrSurface: _hdrSurface && isHdrSource);
+    _applyHdrProperties(player, hdrSurface: nativeSurfaceMode.value);
   }
 
-  /// 是否正在使用 Android SurfaceView 出画（HDR 片源专用）。
-  bool _hdrSurface = false;
+  // ---------------------------------------------------------------------------
+  // 原生 SurfaceView（HDR 直通出画）
+  // ---------------------------------------------------------------------------
 
-  /// 是否走「视频在 Flutter 之下」的原生 SurfaceView 出画。
-  bool get useNativeSurface => _hdrSurface;
+  /// 当前原生 Surface 的所有者令牌（页面/小窗切换时用于过滤过期调用）。
+  int? _nativeOwner;
 
+  /// 原生 Surface 的 global ref，作为 mpv 的 `--wid`。
   int? _nativeWid;
-  (int, int)? _nativeSize;
 
-  /// 原生 SurfaceView 就绪后，把 `wid` / 尺寸交给 mpv。
-  void attachNativeSurface(int wid, int width, int height) {
-    if (wid == 0) return;
+  /// mpv 的渲染尺寸：视频编码尺寸（不是控件显示尺寸）。
+  ///
+  /// 控件缩放/旋转只影响 SurfaceView 的合成，不需要重建 mpv 视频输出；
+  /// 否则每次小窗动画都会重建解码器，画面会不停黑闪。
+  (int, int)? _nativeRenderSize;
+
+  int? _appliedWid;
+  String? _appliedVo;
+  (int, int)? _appliedRenderSize;
+
+  /// 是否用 SurfaceView 布局尺寸做过一次临时渲染尺寸（视频参数还没到）。
+  bool _nativeRenderSizeProvisional = false;
+
+  /// 是否已经请求过窗口 HDR 色彩模式（每次 Surface 挂载后重置）。
+  bool _hdrColorModeRequested = false;
+
+  ValueNotifier<ui.Rect?>? _nativeRectNotifier;
+
+  /// 延迟解除绑定：页面 ↔ 小窗切换时新旧控件会短暂共存。
+  Timer? _nativeDetachTimer;
+
+  /// 原生 Surface 就绪信号：自动播放前等待它，避免「先出声音、黑屏几秒」。
+  Completer<void>? _nativeSurfaceReady;
+
+  bool get nativeSurfaceAttached => _nativeWid != null;
+
+  int? get nativeSurfaceOwner => _nativeOwner;
+
+  void _setVideoController(VideoController? value) {
+    if (identical(_videoController, value)) return;
+    _nativeRectNotifier?.removeListener(_onNativeRectChanged);
+    _nativeRectNotifier = null;
+    _videoController = value;
+    videoOutput.value = value;
+    if (value != null) {
+      _nativeRectNotifier = value.rect;
+      value.rect.addListener(_onNativeRectChanged);
+      _onNativeRectChanged();
+    }
+  }
+
+  void _onNativeRectChanged() {
+    final rect = _videoController?.rect.value;
+    if (rect == null || rect.width <= 1 || rect.height <= 1) return;
+    final size = (rect.width.round(), rect.height.round());
+    if (_nativeRenderSize == size && !_nativeRenderSizeProvisional) return;
+    _nativeRenderSize = size;
+    if (_nativeWid != null) {
+      if (_nativeRenderSizeProvisional) {
+        // 之前用 SurfaceView 布局尺寸临时初始化过 vo，拿到真正的视频尺寸后
+        // 强制重下一次 vo，确保解码/送显使用正确的几何（此时通常还未出画）。
+        _nativeRenderSizeProvisional = false;
+        _appliedVo = null;
+        _appliedRenderSize = null;
+      }
+      _applyNativeSurface();
+      _completeNativeSurfaceReady();
+    }
+  }
+
+  bool _isStaleNativeOwner(int owner) {
+    final current = _nativeOwner;
+    return current != null && owner < current;
+  }
+
+  /// 原生 SurfaceView 就绪后，把 `wid` / 渲染尺寸交给 mpv。
+  void attachNativeSurface(
+    int owner,
+    int wid,
+    int width,
+    int height, {
+    bool provisional = false,
+  }) {
+    if (wid == 0 || _isStaleNativeOwner(owner)) return;
+    _nativeDetachTimer?.cancel();
+    _nativeDetachTimer = null;
+    _nativeOwner = owner;
     _nativeWid = wid;
-    _nativeSize = (width, height);
-    _applyNativeSurface();
+    _hdrColorModeRequested = false;
+    if (width > 1 && height > 1) {
+      _nativeRenderSize = (width, height);
+    }
+    _nativeRenderSizeProvisional = provisional;
+    // 播放器还没创建完时先记下来，_initPlayer 会在 VideoController 初始化
+    // 完成后补一次，避免刚设置的 vo 被 media_kit 的初始化覆盖成 null。
+    if (_videoPlayerController != null) {
+      _applyNativeSurface();
+      // 临时渲染尺寸只是为了让 mpv 先初始化视频链；真正的视频尺寸到了
+      // 再放行自动播放，避免首帧按 16:9 占位尺寸出画后跳一下。
+      if (!provisional) {
+        _completeNativeSurfaceReady();
+      }
+      if (_videoPlayerController!.state.playing) {
+        _requestNativeHdrColorMode();
+      }
+    }
   }
 
-  void resizeNativeSurface(int width, int height) {
-    _nativeSize = (width, height);
-    _applyNativeSurface();
+  /// 真正的 HDR 播放开始时才请求窗口 HDR 色彩模式。
+  ///
+  /// 延迟到这一时刻有两个好处：
+  /// * 避免页面进入动画期间就切换显示模式（表现为整屏闪一下）；
+  /// * 只有真的开始播放 HDR 片源才切换，暂停/加载阶段保持原样。
+  void _requestNativeHdrColorMode() {
+    if (!nativeSurfaceMode.value || !isHdrSource) return;
+    final owner = _nativeOwner;
+    if (owner == null || _hdrColorModeRequested) return;
+    _hdrColorModeRequested = true;
+    unawaited(NativeVideoSurfaceChannel.setHdr(owner: owner, hdr: true));
   }
 
-  void detachNativeSurface() {
-    _nativeWid = null;
-    _nativeSize = null;
-    final player = _videoPlayerController;
-    if (player == null) return;
-    try {
-      player.setProperty('vo', 'null');
-      player.setProperty('wid', '0');
-    } catch (_) {}
+  /// 原生 Surface 被销毁（切后台、窗口重建等）时解除绑定。
+  ///
+  /// 延迟 400ms 执行：页面切小窗时新控件通常会紧接着 create 并接管，
+  /// 立即把 `vo` 置空会让画面黑一下。
+  void detachNativeSurface(int owner) {
+    if (owner != _nativeOwner) return;
+    _nativeDetachTimer?.cancel();
+    final ownerPlayer = _videoPlayerController;
+    _nativeDetachTimer = Timer(const Duration(milliseconds: 400), () {
+      _nativeDetachTimer = null;
+      if (_nativeOwner != owner) return;
+      // 期间播放器被换掉（切视频/切画质）时不要再动新播放器。
+      if (!identical(_videoPlayerController, ownerPlayer)) return;
+      _nativeOwner = null;
+      _nativeWid = null;
+      _appliedWid = null;
+      _appliedVo = null;
+      _appliedRenderSize = null;
+      _nativeRenderSizeProvisional = false;
+      final player = ownerPlayer;
+      if (player == null) return;
+      try {
+        player.setProperty('vo', 'null');
+        player.setProperty('wid', '0');
+      } catch (_) {}
+    });
   }
 
-  void _applyNativeSurface() {
-    final player = _videoPlayerController;
+  void _applyNativeSurface({Player? target}) {
+    final player = target ?? _videoPlayerController;
     final wid = _nativeWid;
-    final size = _nativeSize;
+    final size = _nativeRenderSize;
     if (player == null || wid == null || size == null) return;
-    if (size.$1 <= 0 || size.$2 <= 0) return;
+    if (size.$1 <= 1 || size.$2 <= 1) return;
+    final vo = Pref.hdrBackend;
+    final needVo = _appliedWid != wid || _appliedVo != vo;
     try {
-      // 顺序很重要：先复位 vo，再给尺寸/wid，最后设置 vo。
-      player.setProperty('vo', 'null');
-      player.setProperty('android-surface-size', '${size.$1}x${size.$2}');
-      player.setProperty('wid', '$wid');
-      player.setProperty('vid', 'auto');
-      player.setProperty('vo', Pref.hdrBackend);
+      if (_appliedRenderSize != size) {
+        player.setProperty('android-surface-size', '${size.$1}x${size.$2}');
+        _appliedRenderSize = size;
+      }
+      if (needVo) {
+        // 顺序很重要：先复位 vo，再给 wid，最后设置 vo。
+        player.setProperty('vo', 'null');
+        player.setProperty('wid', '$wid');
+        player.setProperty('vid', 'auto');
+        player.setProperty('vo', vo);
+        _appliedWid = wid;
+        _appliedVo = vo;
+        _applyHdrProperties(player, hdrSurface: true);
+      }
       debugPrint(
-        '[HDR] nativeSurface vo=${Pref.hdrBackend} wid=$wid ${size.$1}x${size.$2}',
+        '[HDR] nativeSurface vo=$vo wid=$wid ${size.$1}x${size.$2}',
       );
     } catch (_) {}
   }
 
+  void _resetNativeSurfaceState() {
+    _nativeDetachTimer?.cancel();
+    _nativeDetachTimer = null;
+    _nativeOwner = null;
+    _nativeWid = null;
+    _nativeRenderSize = null;
+    _appliedWid = null;
+    _appliedVo = null;
+    _appliedRenderSize = null;
+    _nativeRenderSizeProvisional = false;
+    _hdrColorModeRequested = false;
+    _nativeSurfaceReady = null;
+  }
+
+  void _completeNativeSurfaceReady() {
+    final completer = _nativeSurfaceReady;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
   /// 写入 mpv 的 HDR 色彩处理参数。
   ///
-  /// 只改色彩处理相关的运行期属性，不触碰 `--vo`：media_kit 依赖固定的
-  /// 视频输出驱动把画面交给 Flutter 纹理，随意替换 `--vo` 会黑屏；
-  /// SurfaceView 出画路径的 `--vo` 由 media_kit 的 Android 控制器负责。
+  /// 只改色彩处理相关的运行期属性，不在这里决定 `--vo`：
+  /// * 纹理出画时 `--vo` 由 media_kit 的 Android 控制器负责；
+  /// * SurfaceView 出画时由 [_applyNativeSurface] 在 `wid` 就绪后设置。
   void _applyHdrProperties(Player player, {bool hdrSurface = false}) {
     try {
       // 先复位再写入，确保关闭 HDR 后不会残留上一次的参数
@@ -1283,6 +1459,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         }
         return;
       }
+      // 片源切换（切换画质 / 换集）可能改变出画方式：SDR 走纹理、HDR 走
+      // SurfaceView。出画方式在播放器创建时固定，因此这里按需重建播放器。
+      await _switchOutputIfNeeded();
       // 配置Player 音轨、字幕等等
       await _createVideoController(dataSource, seekTo, volume);
 
@@ -1293,9 +1472,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           );
         }
         _removeListeners();
+        _setVideoController(null);
         _videoPlayerController?.dispose();
         _videoPlayerController = null;
-        _videoController = null;
         return;
       }
 
@@ -1311,8 +1490,15 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         triggerFullScreen(status: true);
       }
 
-      await _initializePlayer();
-      onInit?.call();
+      // HDR 直通的原生 SurfaceView 需要播放页先挂载并完成布局，才能把 wid
+      // 交给 mpv；否则 _initializePlayer 会白等超时。其它路径保持原有顺序。
+      if (nativeSurfaceMode.value) {
+        onInit?.call();
+        await _initializePlayer();
+      } else {
+        await _initializePlayer();
+        onInit?.call();
+      }
     } catch (err, stackTrace) {
       dataStatus.value = DataStatus.error;
       if (kDebugMode) {
@@ -1387,10 +1573,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     final opt = {
       'video-sync': Pref.videoSync,
       if (Platform.isAndroid) 'ao': Pref.audioOutput,
-      'volume': (PlatformUtils.isMobile
-              ? (Pref.enableAppVolume ? volume.value * 100 : Pref.playerVolume)
-              : volume.value * 100)
-          .toString(),
+      'volume':
+          (PlatformUtils.isMobile
+                  ? (Pref.enableAppVolume
+                        ? volume.value * 100
+                        : Pref.playerVolume)
+                  : volume.value * 100)
+              .toString(),
       'volume-max': kMaxVolume.toString(),
     };
     final autosync = Pref.autosync;
@@ -1398,22 +1587,20 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       opt['autosync'] = autosync;
     }
 
-    // HDR 片源在 Android 上改用 SurfaceView 出画：Flutter 纹理固定为
-    // RGBA8888，会把 10bit / HDR 元数据丢掉，SurfaceView 才能让 libmpv
-    // 申请 10bit 的 EGL 表面并经 target-colorspace-hint 激发面板 HDR。
-    // HDR 片源可选的 SurfaceView 出画路径：能真正触发面板 HDR，但
-    // hybrid composition 的原生 View 会盖住 Flutter 叠加层（弹幕/控件），
-    // 因此只在用户显式开启实验开关时启用。
-    _hdrSurface = Platform.isAndroid &&
-        Pref.enableHdr &&
-        Pref.hdrSurface &&
-        (isHdrSource || hasHdrStream);
+    // HDR 片源在 Android 上改用「Flutter 之下的 SurfaceView」出画：
+    // Flutter 纹理固定 RGBA8888，会把 10bit / HDR 元数据丢掉；SurfaceView 才能
+    // 让 MediaCodec / libmpv 直接送显并点亮面板 HDR。SDR 片源继续走纹理，
+    // 保留硬解、Anime4K 等 mpv 渲染能力。
+    nativeSurfaceMode.value = _wantNativeSurface;
+    _resetNativeSurfaceState();
+    _nativeSurfaceReady = nativeSurfaceMode.value ? Completer<void>() : null;
     debugPrint(
-      '[HDR] init: enable=${Pref.enableHdr} exp=${Pref.hdrSurface} '
-      'hdrSource=$isHdrSource hasHdrStream=$hasHdrStream surface=$_hdrSurface '
-      'vo=${_hdrSurface ? Pref.hdrBackend : '-'}',
+      '[HDR] init: enable=${Pref.enableHdr} direct=${Pref.hdrSurface} '
+      'hdrSource=$isHdrSource surface=${nativeSurfaceMode.value} '
+      'vo=${nativeSurfaceMode.value ? Pref.hdrBackend : '-'} hwdec=${_resolveHwdec()}',
     );
 
+    final hwdec = _resolveHwdec();
     final player = await Player.create(
       configuration: PlayerConfiguration(
         logLevel: kDebugMode ? .warn : .error,
@@ -1427,22 +1614,26 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     });
 
     // HDR / 杜比视界：必须在视频输出初始化前写入，vo 创建时才会读取这些参数
-    _applyHdrProperties(player, hdrSurface: _hdrSurface && isHdrSource);
+    _applyHdrProperties(player, hdrSurface: nativeSurfaceMode.value);
 
     assert(_videoController == null);
 
-    _videoController = await VideoController.create(
+    final videoController = await VideoController.create(
       player,
       configuration: VideoControllerConfiguration(
         enableHardwareAcceleration: hwdec != null,
         androidAttachSurfaceAfterVideoParameters: false,
         hwdec: hwdec,
-        androidSurfaceView: _hdrSurface,
-        // HDR 片源的渲染后端可在设置里切换（gpu-next / gpu / mediacodec_embed），
+        // 视频画面由应用层的原生 SurfaceView 提供，media_kit 不创建纹理。
+        androidExternalSurface: nativeSurfaceMode.value,
+        // HDR 片源的渲染后端可在设置里切换（mediacodec_embed / gpu-next / gpu），
         // 不同设备驱动对 10bit EGL 的支持差异很大。
-        vo: _hdrSurface ? HdrBackend.fromValue(Pref.hdrBackend).value : null,
+        vo: nativeSurfaceMode.value
+            ? HdrBackend.fromValue(Pref.hdrBackend).value
+            : null,
       ),
     );
+    _setVideoController(videoController);
 
     if (Platform.isAndroid) {
       // Avoid sizing the surface using mpv's idle window between media loads.
@@ -1450,13 +1641,54 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
 
     // 原生 SurfaceView 可能早于播放器就绪，这里补一次挂载。
-    _applyNativeSurface();
+    // media_kit 初始化会把 vo 复位成 null，所以必须强制重新下发。
+    if (_nativeWid != null) {
+      _appliedWid = null;
+      _appliedVo = null;
+      _appliedRenderSize = null;
+      _applyNativeSurface(target: player);
+      if (!_nativeRenderSizeProvisional) {
+        _completeNativeSurfaceReady();
+      }
+    }
 
     player.setMediaHeader(userAgent: BrowserUa.pc, referer: HttpString.baseUrl);
 
     _startListeners(player);
 
     return player;
+  }
+
+  /// 片源切换时按需重建播放器，使出画方式与新的片源类型一致。
+  ///
+  /// 出画方式（纹理 / SurfaceView）在创建 `VideoController` 时固定：
+  /// * 纹理路径无法输出 HDR，SurfaceView 路径才能让系统点亮面板 HDR；
+  /// * SurfaceView 路径使用 `vo=mediacodec_embed`，会绕过 mpv 渲染，
+  ///   不适合给 SDR 片源使用（会失去 Anime4K 等能力）。
+  ///
+  /// 因此只在 SDR ↔ HDR 切换时重建，普通换集、换 P 不受影响。
+  Future<void> _switchOutputIfNeeded() async {
+    final wantNative = _wantNativeSurface;
+    final player = _videoPlayerController;
+    if (player == null) {
+      nativeSurfaceMode.value = wantNative;
+      return;
+    }
+    if (nativeSurfaceMode.value == wantNative) return;
+
+    debugPrint('[HDR] output switch: native=$wantNative');
+    _removeListeners();
+    _hdrSnapshotTimer?.cancel();
+    _resetNativeSurfaceState();
+    _setVideoController(null);
+    _videoPlayerController = null;
+    nativeSurfaceMode.value = wantNative;
+    // 先让 Flutter 把视频控件切到新的出画方式（纹理 ↔ 原生占位），
+    // 再销毁旧播放器；否则旧 VideoController 被 dispose 后仍会被 Widget 使用一帧。
+    await SchedulerBinding.instance.endOfFrame;
+    try {
+      await player.dispose();
+    } catch (_) {}
   }
 
   late final buffer = Pref.initBuffer(_playbackSpeed.value);
@@ -1480,9 +1712,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       player = await _initPlayer();
       if (_playerCount == 0) {
         _removeListeners();
+        _setVideoController(null);
         player.dispose();
         player = null;
-        _videoController = null;
         return;
       }
       _videoPlayerController = player;
@@ -1519,7 +1751,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
 
     assert(!isLive || seekTo == null);
-    // 按当前片源重新落一次 --hwdec：切换画质时播放器不会重建，
+    // 按当前片源重新落一次 --hwdec：切换画质/换集时播放器可能复用，
     // 旧的直通解码会让 HDR 色调映射静默失效。file-local-options 只作用于
     // 接下来加载的这一个文件，不会污染后续播放。
     if (_resolveHwdec() case final hwdec?) {
@@ -1535,7 +1767,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     );
     applyVideoPictureParameters(player);
     debugPrint(
-      '[HDR] open: hdrSource=$isHdrSource surface=$_hdrSurface '
+      '[HDR] open: hdrSource=$isHdrSource surface=${nativeSurfaceMode.value} '
       'hwdec=${_resolveHwdec()} platform=${Platform.isAndroid ? 'android' : 'desktop'}',
     );
     _startHdrSnapshot();
@@ -1566,9 +1798,24 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _initVideoFit();
 
     // 自动播放
-    if (_autoPlay) {
-      playIfExists();
+    if (!_autoPlay) return;
+    if (nativeSurfaceMode.value &&
+        !nativeSurfaceAttached &&
+        _nativeSurfaceReady != null) {
+      // HDR 直通：等原生 Surface 就绪再开始播放，避免「先出声音、黑屏几秒」。
+      // 超时后照常播放：Surface 晚到时 mpv 会自动补上画面。
+      unawaited(
+        _nativeSurfaceReady!.future
+            .timeout(const Duration(milliseconds: 600), onTimeout: () {})
+            .then((_) {
+              if (_instance != null && _autoPlay) {
+                playIfExists();
+              }
+            }),
+      );
+      return;
     }
+    playIfExists();
   }
 
   List<StreamSubscription>? _subscriptions;
@@ -1619,6 +1866,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           _stopWakeLockTimer();
           _updatePlaybackState();
           WakelockPlus.enable();
+          _requestNativeHdrColorMode();
 
           if (_isAutoEnterPip &&
               _autoAudioState != AutoAudioOnlyState.autoAudioOnly) {
@@ -2929,9 +3177,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (kDebugMode) {
       debugPrint('dispose player');
     }
+    nativeSurfaceMode.value = false;
+    _resetNativeSurfaceState();
+    _setVideoController(null);
     _videoPlayerController?.dispose();
     _videoPlayerController = null;
-    _videoController = null;
     _activeVideoContextKey = null;
     danmakuMaskPath.dispose();
     _instance = null;
@@ -3138,11 +3388,30 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// ensureVideoShot 会做 _canUseSeekPreview 守卫 + 迟到响应丢弃，
   /// 保留本 fork 版本，删除上游的简单版避免命名冲突。
   int _screenshotState = 0;
+
+  /// 抓取当前画面：HDR 直通时 mpv 拿不到帧，改由原生 SurfaceView 截图。
+  Future<ui.Image?> _grabScreenshotImage() async {
+    final nativeOwner = _nativeOwner;
+    if (!nativeSurfaceMode.value || nativeOwner == null) {
+      return videoPlayerController?.screenshot();
+    }
+    final bytes = await NativeVideoSurfaceChannel.capture(owner: nativeOwner);
+    if (bytes == null || bytes.isEmpty) return null;
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      codec.dispose();
+      return frame.image;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> takeScreenshot() async {
     if (_screenshotState > 0) return;
     _screenshotState = 1;
     SmartDialog.showToast('截图中');
-    final image = await videoPlayerController?.screenshot();
+    final image = await _grabScreenshotImage();
     if (image != null) {
       SmartDialog.showToast('点击弹窗或按 Enter 保存截图');
       await showDialog(

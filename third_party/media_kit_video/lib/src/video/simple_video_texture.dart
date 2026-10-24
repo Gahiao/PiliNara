@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:media_kit_video/src/video/hdr_surface.dart';
 
 class SimpleVideo extends StatefulWidget {
   final Color fill;
@@ -66,9 +65,7 @@ class SimpleVideoState extends State<SimpleVideo> {
       builder: (context, _) {
         final id = ctr.id.value;
         final rect = ctr.rect.value;
-        // HDR 片源走原生 SurfaceView（hybrid composition），普通片源仍走纹理。
-        final surfaceView = ctr.usesAndroidSurfaceView;
-        if ((id != null || surfaceView) && rect != null && _visible) {
+        if (id != null && rect != null && _visible) {
           return SizedBox(
             width: widget.aspectRatio == null
                 ? rect.width / _devicePixelRatio
@@ -76,13 +73,7 @@ class SimpleVideoState extends State<SimpleVideo> {
             height: rect.height / _devicePixelRatio,
             child: Stack(
               children: [
-                if (surfaceView)
-                  MpvHdrSurface(
-                    handle: ctr.player.handle,
-                    tenBit: ctr.configuration.vo != 'mediacodec_embed',
-                  )
-                else
-                  Texture(textureId: id!, filterQuality: widget.filterQuality),
+                Texture(textureId: id, filterQuality: widget.filterQuality),
                 if (rect.width <= 1.0 && rect.height <= 1.0)
                   Positioned.fill(child: ColoredBox(color: widget.fill)),
               ],

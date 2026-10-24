@@ -34,15 +34,17 @@ enum HdrOutputMode {
 /// 不同设备的 libmpv/GPU 驱动对 10bit EGL 的支持差异很大，这里提供几种
 /// 可选后端，方便逐一切换验证；改完需要重新打开视频。
 enum HdrBackend {
-  /// libplacebo 渲染链路，唯一支持 `--target-colorspace-hint` 的后端。
-  gpuNext('gpu-next', 'gpu-next（推荐）'),
+  /// libplacebo 渲染链路，支持 `--target-colorspace-hint`；
+  /// 但当前 libmpv 构建通常没有 Android HDR 输出能力，属于实验项。
+  gpuNext('gpu-next', 'gpu-next（实验）'),
 
   /// 传统 GPU 渲染，兼容性更好，但通常无法激发 HDR。
   gpu('gpu', 'gpu（兼容模式）'),
 
   /// 由 MediaCodec 直接解码到 SurfaceView，HDR 由解码器/系统直通，
   /// 不经过 mpv 渲染，因此色调映射等参数不生效。
-  mediacodecEmbed('mediacodec_embed', 'MediaCodec 直通（实验）');
+  /// 这是当前唯一确定能点亮面板 HDR 的后端（需要开启硬解），也是默认值。
+  mediacodecEmbed('mediacodec_embed', 'MediaCodec 直通（推荐）');
 
   const HdrBackend(this.value, this.label);
 
@@ -82,7 +84,11 @@ enum HdrToneMapping {
 /// mpv 拿不到 10bit 画面，因此无法做高质量的色调映射；
 /// 拷贝解码（`mediacodec-copy` / `auto-copy`）则会把画面交回 mpv 处理。
 enum HdrHwdecMode {
-  auto('auto', '自动（HDR 优先拷贝解码）', 'HDR 片源自动使用拷贝解码以保证色调映射生效，SDR 片源保持原设置'),
+  auto(
+    'auto',
+    '自动（HDR 优先拷贝解码）',
+    'HDR 直通出画时固定 mediacodec；纹理出画时 HDR 片源自动使用拷贝解码以保证色调映射生效，SDR 片源保持原设置',
+  ),
   follow('follow', '跟随硬解设置', '始终使用「硬解模式」中选择的解码器'),
   copy('copy', '拷贝解码（可色调映射）', '解码后交给 mpv 处理，色调映射效果更好，但更耗电'),
   direct('direct', '直通解码（省电）', 'HDR 数据直接送显，可能无法执行色调映射');
@@ -105,8 +111,10 @@ enum HdrHwdecMode {
 ///   观感依然是正确的 HDR；
 /// * profile 5 使用 IPTPQc2 色彩空间，需要 libplacebo（mpv `gpu-next`）
 ///   解析 RPU 元数据才能正确还原色彩；
-/// * 真正的 DoVi 直通还需要显示设备与渲染后端同时支持，当前 media_kit
-///   的纹理渲染通路通常不满足，因此这里只保证「正确解码 + 合理映射」。
+/// * Android 走「Flutter 之下的 SurfaceView」+ `vo=mediacodec_embed` 时，
+///   MediaCodec 的输出 dataspace 与窗口 HDR 色彩模式一起交给系统直通，
+///   色彩由系统/显示端处理（mpv 的色调映射参数在该路径下不生效）；
+/// * 纹理出画（SDR 路径或关闭直通出画时）只能做 8bit 色调映射。
 class HdrConfig {
   const HdrConfig({
     required this.enabled,
@@ -155,8 +163,7 @@ class HdrConfig {
     2000,
   ];
 
-  static String targetPeakLabel(int nits) =>
-      nits <= 0 ? '自动' : '$nits nits';
+  static String targetPeakLabel(int nits) => nits <= 0 ? '自动' : '$nits nits';
 
   bool get passthrough => mode == HdrOutputMode.passthrough;
 
