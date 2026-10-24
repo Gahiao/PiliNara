@@ -72,8 +72,12 @@ param(
     [ValidateSet('apk', 'aab', 'both')]
     [string]$Target = 'apk',
     [switch]$Dev,
-    [switch]$Debug,
+    [switch]$DebugBuild,
     [switch]$NoSplitAbi,
+    [string]$TargetPlatform,
+    [switch]$Deploy,
+    [string]$DeviceIp,
+    [string]$AppId = 'com.example.piliplus',
     [int]$BuildNumber = 0,
     [switch]$SkipPatch,
     [switch]$SkipPubGet,
@@ -104,6 +108,32 @@ function Invoke-External {
     $line += ' > "' + $tmp + '" 2>&1'
 
     Write-Host ("    > {0} {1}" -f (Split-Path -Leaf $Exe), ($Arguments -join ' ')) -ForegroundColor DarkGray
+
+    # -Echo streams the output live instead of buffering it in a temp file, so a
+    # long "flutter build" does not look frozen. The last lines are still kept for
+    # error reporting.
+    if ($Echo) {
+        $buffer = New-Object System.Collections.ArrayList
+        $previousEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        Push-Location $WorkingDirectory
+        try {
+            & $Exe @Arguments 2>&1 | ForEach-Object {
+                $lineText = "$_"
+                [void]$buffer.Add($lineText)
+                Write-Host $lineText
+            }
+            $code = $LASTEXITCODE
+        }
+        finally {
+            Pop-Location
+            $ErrorActionPreference = $previousEap
+        }
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        $streamed = ($buffer | Select-Object -Last 80) -join "`n"
+        return [pscustomobject]@{ Code = $code; Output = $streamed }
+    }
+
     cmd /c $line | Out-Null
     $code = $LASTEXITCODE
 
@@ -280,22 +310,26 @@ try {
 
     $variantTag = ''
     if ($Dev) { $variantTag += '_dev' }
-    if ($Debug) { $variantTag += '_debug' }
+    if ($DebugBuild) { $variantTag += '_debug' }
 
-    if ($Debug -and $Target -ne 'apk') {
+    if ($DebugBuild -and $Target -ne 'apk') {
         Write-Note 'appbundle only exists for release, building apk instead'
         $Target = 'apk'
     }
 
     if ($Target -eq 'apk' -or $Target -eq 'both') {
         $buildType = 'release'
-        if ($Debug) { $buildType = 'debug' }
+        if ($DebugBuild) { $buildType = 'debug' }
 
         Write-Step ("flutter build apk --{0}" -f $buildType)
         $buildArgs = @('build', 'apk', ('--' + $buildType), $nameArg, $buildNumberArg)
 
         # Debug builds are universal; splitting per ABI only saves release size.
-        if (-not $Debug -and -not $NoSplitAbi) { $buildArgs += '--split-per-abi' }
+        if (-not $DebugBuild -and -not $NoSplitAbi) { $buildArgs += '--split-per-abi' }
+        if ($TargetPlatform) {
+            $buildArgs += '--target-platform'
+            $buildArgs += $TargetPlatform
+        }
 
         if ($Dev) {
             $buildArgs += '--android-project-arg'
@@ -321,7 +355,7 @@ try {
 
             # Only pick up the APKs that belong to this variant.
             $wanted = 'release'
-            if ($Debug) { $wanted = 'debug' }
+            if ($DebugBuild) { $wanted = 'debug' }
             if ($apk.Name -notlike ("*-{0}.apk" -f $wanted)) { continue }
 
             $destName = "PiliPlus_android_{0}{1}_{2}.apk" -f $fullVersion, $variantTag, $abi
@@ -349,6 +383,57 @@ try {
         Copy-Item $aab.FullName $dest -Force
         $artifacts += $dest
         Write-Ok ("{0} ({1:N1} MB)" -f $dest, ((Get-Item $dest).Length / 1MB))
+    }
+
+    if ($Deploy) {
+        Write-Step 'deploying over adb'
+
+        $adbCandidates = @(
+            (Join-Path $env:ANDROID_SDK_ROOT 'platform-tools\adb.exe'),
+            (Join-Path $env:ANDROID_HOME 'platform-tools\adb.exe'),
+            'E:\androidSDK\platform-tools\adb.exe',
+            (Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'))
+        $adb = ''
+        foreach ($candidate in $adbCandidates) {
+            if ($candidate -and (Test-Path $candidate)) { $adb = $candidate; break }
+        }
+        if (-not $adb) {
+            $adbCmd = Get-Command adb -ErrorAction SilentlyContinue
+            if ($adbCmd) { $adb = $adbCmd.Source }
+        }
+        if (-not $adb) { throw 'adb not found; install Android platform-tools or set ANDROID_HOME' }
+        Write-Ok ("adb: {0}" -f $adb)
+
+        if ($DeviceIp) {
+            Write-Note ("adb connect {0}" -f $DeviceIp)
+            $connect = Invoke-External -Exe $adb -Arguments @('connect', $DeviceIp) -WorkingDirectory $script:RepoRoot -Echo
+            if ($connect.Output -match 'cannot|failed|refused') {
+                Write-Note ("connect failed: {0}" -f $connect.Output)
+            }
+        }
+
+        $devicesOutput = (Invoke-External -Exe $adb -Arguments @('devices') -WorkingDirectory $script:RepoRoot).Output
+        $readyDevice = ($devicesOutput -split "`n" | Where-Object { $_ -match '\sdevice$' } | Select-Object -First 1)
+
+        if (-not $readyDevice) {
+            Write-Host $devicesOutput -ForegroundColor DarkGray
+            throw 'no device in "device" state; run adb pair / adb connect first, or pass -DeviceIp'
+        }
+        Write-Ok ("device: {0}" -f $readyDevice.Trim())
+
+        $apkToInstall = $artifacts | Where-Object { $_ -match 'arm64' } | Select-Object -First 1
+        if (-not $apkToInstall) { $apkToInstall = $artifacts | Select-Object -First 1 }
+        if (-not $apkToInstall) { throw 'no apk to install' }
+
+        $install = Invoke-External -Exe $adb -Arguments @('install', '-r', $apkToInstall) -WorkingDirectory $script:RepoRoot -Echo
+        if ($install.Code -ne 0) { throw ("adb install failed:`n{0}" -f $install.Output) }
+
+        $appIdReal = $AppId
+        if ($Dev) { $appIdReal += '.dev' }
+        Invoke-External -Exe $adb `
+            -Arguments @('shell', 'monkey', '-p', $appIdReal, '-c', 'android.intent.category.LAUNCHER', '1') `
+            -WorkingDirectory $script:RepoRoot | Out-Null
+        Write-Ok ("launched {0}" -f $appIdReal)
     }
 
     Write-Step 'summary'

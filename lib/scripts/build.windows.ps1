@@ -93,6 +93,30 @@ function Invoke-External {
     $line += ' > "' + $tmp + '" 2>&1'
 
     Write-Host ("    > {0} {1}" -f (Split-Path -Leaf $Exe), ($Arguments -join ' ')) -ForegroundColor DarkGray
+
+    # -Echo streams output live; the tail is still captured for error messages.
+    if ($Echo) {
+        $buffer = New-Object System.Collections.ArrayList
+        $previousEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        Push-Location $WorkingDirectory
+        try {
+            & $Exe @Arguments 2>&1 | ForEach-Object {
+                $lineText = "$_"
+                [void]$buffer.Add($lineText)
+                Write-Host $lineText
+            }
+            $code = $LASTEXITCODE
+        }
+        finally {
+            Pop-Location
+            $ErrorActionPreference = $previousEap
+        }
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        $streamed = ($buffer | Select-Object -Last 80) -join "`n"
+        return [pscustomobject]@{ Code = $code; Output = $streamed }
+    }
+
     cmd /c $line | Out-Null
     $code = $LASTEXITCODE
 

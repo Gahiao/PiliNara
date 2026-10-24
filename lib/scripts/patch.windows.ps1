@@ -357,13 +357,24 @@ try {
 
     Write-Step 'git identity'
     $userName = (Invoke-External -Exe 'git' -Arguments @('config', '--global', 'user.name') -WorkingDirectory $script:RepoRoot)
-    if ($userName.Code -ne 0 -or -not $userName.Output) {
-        Invoke-External -Exe 'git' -Arguments @('config', '--global', 'user.name', 'ci') -WorkingDirectory $script:RepoRoot | Out-Null
-        Invoke-External -Exe 'git' -Arguments @('config', '--global', 'user.email', 'example@example.com') -WorkingDirectory $script:RepoRoot | Out-Null
-        Write-Ok 'user.name / user.email set for this machine'
+    $userEmail = (Invoke-External -Exe 'git' -Arguments @('config', '--global', 'user.email') -WorkingDirectory $script:RepoRoot)
+
+    if ($userName.Code -eq 0 -and $userName.Output) {
+        Write-Ok ("user.name  = {0}" -f $userName.Output.Trim())
+        if ($userEmail.Code -eq 0 -and $userEmail.Output) {
+            Write-Ok ("user.email = {0}" -f $userEmail.Output.Trim())
+        }
+        else {
+            Write-Note 'user.email is not set: git config --global user.email <you@example.com>'
+        }
     }
     else {
-        Write-Ok ("user.name = {0}" -f $userName.Output.Trim())
+        # The CI version of this script used to force "ci <example@example.com>"
+        # here. On a developer machine that silently rewrites the global identity,
+        # so this port only reports and never overwrites it.
+        Write-Note 'git user.name is not set'
+        Write-Note 'set it with: git config --global user.name <your-github-name>'
+        Write-Note 'and:        git config --global user.email <your-github-email>'
     }
 
     if ($ResetFlutter) {
