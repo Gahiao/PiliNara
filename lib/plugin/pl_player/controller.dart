@@ -593,6 +593,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 当前片源是否为 HDR / 杜比视界流，由播放页在 setDataSource 前写入。
   bool isHdrSource = false;
 
+  /// 本次播放的 HDR 直通已被画面自检判定为黑屏，自动退回纹理出画。
+  bool _hdrDirectFallback = false;
+
   /// 是否应该走「视频在 Flutter 之下」的 SurfaceView 出画。
   ///
   /// 只有真正的 HDR 片源才需要它：Flutter 纹理固定 8bit，会丢掉 HDR 元数据；
@@ -606,7 +609,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       isHdrSource &&
       // mediacodec_embed 必须硬解；用户关掉硬解时退回纹理，避免黑屏。
       (HdrBackend.fromValue(Pref.hdrBackend) != HdrBackend.mediacodecEmbed ||
-          Pref.enableHA);
+          Pref.enableHA) &&
+      !_hdrDirectFallback;
 
   /// 原生 SurfaceView 出画开关。Rx 以便播放页在出画方式变化时立即重建视频控件。
   final RxBool nativeSurfaceMode = false.obs;
@@ -1195,29 +1199,55 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
   }
 
-  /// 播放开始后采样一次 SurfaceView 画面。
+  /// 播放开始后采样 SurfaceView 画面。
   ///
   /// PixelCopy 读取的是原生 Surface 自身的内容，不受 Flutter 是否遮盖影响：
   /// 返回 0 说明解码器没有出画（换后端/开启杜比兼容），返回非 0 但仍看不到
   /// 画面则说明是 Flutter 层把视频盖住了。
   void _scheduleNativeProbe() {
-    if (!nativeSurfaceMode.value || !isHdrSource) return;
+    if (!nativeSurfaceMode.value || !isHdrSource || _hdrDirectFallback) return;
     _nativeProbeTimer?.cancel();
-    _nativeProbeTimer = Timer(const Duration(seconds: 4), () async {
+    _nativeProbeTimer = Timer(const Duration(seconds: 4), () {
       _nativeProbeTimer = null;
-      final owner = _nativeOwner;
-      if (owner == null || !nativeSurfaceMode.value) return;
-      final maxLuma = await NativeVideoSurfaceChannel.probe(owner: owner);
-      debugPrint('[HDR] probe maxLuma=$maxLuma');
-      _lastProbeLuma = maxLuma;
-      if (maxLuma == null || maxLuma > 1) return;
-      if (!nativeSurfaceMode.value || _instance == null) return;
-      SmartDialog.showToast(
-        'HDR 直通出画未检测到画面：可能是当前解码器不支持此片源。'
-        '可尝试开启「杜比视界兼容模式」或关闭「HDR 直通出画」后重开视频',
-        displayTime: const Duration(seconds: 5),
-      );
+      _probeNativeSurface(0);
     });
+  }
+
+  Future<void> _probeNativeSurface(int attempt) async {
+    final owner = _nativeOwner;
+    if (owner == null || !nativeSurfaceMode.value) return;
+    final maxLuma = await NativeVideoSurfaceChannel.probe(owner: owner);
+    debugPrint('[HDR] probe maxLuma=$maxLuma');
+    _lastProbeLuma = maxLuma;
+    if (maxLuma == null || maxLuma > 1) return;
+    if (!nativeSurfaceMode.value || _instance == null) return;
+    // 连续两次都全黑才判定解码器没有出画，避免黑场误判。
+    if (attempt < 1) {
+      _nativeProbeTimer = Timer(const Duration(milliseconds: 1500), () {
+        _nativeProbeTimer = null;
+        _probeNativeSurface(attempt + 1);
+      });
+      return;
+    }
+    _fallbackFromNativeSurface();
+  }
+
+  /// 自检确认 Surface 全黑后自动退回纹理出画，避免一直黑屏。
+  void _fallbackFromNativeSurface() {
+    if (!nativeSurfaceMode.value) return;
+    _hdrDirectFallback = true;
+    _nativeProbeTimer?.cancel();
+    _nativeProbeTimer = null;
+    SmartDialog.showToast(
+      'HDR 直通出画未检测到画面，已自动切回纹理出画（仅色调映射）',
+      displayTime: const Duration(seconds: 4),
+    );
+    final callback = onNeedsPlayerInit;
+    if (callback != null) {
+      unawaited(callback());
+    } else {
+      nativeSurfaceMode.value = false;
+    }
   }
 
   /// 更新 SurfaceView 的布局尺寸。
@@ -1416,6 +1446,15 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }) async {
     try {
       _processing = true;
+      // 换视频/换集时重新给 HDR 直通一次机会；同一视频的画质切换/自检回退
+      // 不应重置（否则会反复尝试同一组失败参数）。
+      final isNewVideo =
+          (bvid != null && bvid != _bvid) ||
+          (cid != null && cid != this.cid) ||
+          (epid != null && epid != _epid);
+      if (isNewVideo) {
+        _hdrDirectFallback = false;
+      }
       // 换视频/换P：解除倍速锁定并恢复锁定前速度。
       // 必须先于临时配置重置执行，否则 lastPlaybackSpeed 会被先行覆盖
       await releaseSpeedLock();
