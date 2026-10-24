@@ -1075,6 +1075,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (native)
         '原生 Surface: wid=${_nativeWid ?? '-'}，'
             'SurfaceView 尺寸=${_nativeSurfaceSize == null ? '-' : '${_nativeSurfaceSize!.$1}x${_nativeSurfaceSize!.$2}'}',
+      if (native) '直通画面采样: ${_lastProbeLuma ?? '-'}（0=Surface 全黑）',
       'vo: ${read('vo')}',
       'vo-configured: ${read('vo-configured')}',
       'hwdec-current: ${read('hwdec-current')}',
@@ -1143,6 +1144,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// HDR 直通画面自检（播放几秒后采样一次，区分解码器黑屏和 Flutter 遮盖）。
   Timer? _nativeProbeTimer;
 
+  /// 最近一次 SurfaceView 画面采样结果（0 表示全黑）。
+  int? _lastProbeLuma;
+
   /// 原生视频当前在屏幕上的矩形（逻辑像素，全局坐标）。
   ///
   /// 播放页根节点用它挖出唯一的透明区域；其余区域由根节点显式铺黑，
@@ -1203,6 +1207,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       final owner = _nativeOwner;
       if (owner == null || !nativeSurfaceMode.value) return;
       final maxLuma = await NativeVideoSurfaceChannel.probe(owner: owner);
+      debugPrint('[HDR] probe maxLuma=$maxLuma');
+      _lastProbeLuma = maxLuma;
       if (maxLuma == null || maxLuma > 1) return;
       if (!nativeSurfaceMode.value || _instance == null) return;
       SmartDialog.showToast(
@@ -1306,6 +1312,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _nativeResizeTimer = null;
     _nativeProbeTimer?.cancel();
     _nativeProbeTimer = null;
+    _lastProbeLuma = null;
     _nativeOwner = null;
     _nativeWid = null;
     _nativeSurfaceSize = null;
