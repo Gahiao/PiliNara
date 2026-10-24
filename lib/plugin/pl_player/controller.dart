@@ -1076,6 +1076,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         '原生 Surface: wid=${_nativeWid ?? '-'}，'
             'SurfaceView 尺寸=${_nativeSurfaceSize == null ? '-' : '${_nativeSurfaceSize!.$1}x${_nativeSurfaceSize!.$2}'}',
       if (native) '直通画面采样: ${_lastProbeLuma ?? '-'}（0=Surface 全黑）',
+      if (native) '直通画面矩形: ${nativeContentRect.value ?? '-'}',
       'vo: ${read('vo')}',
       'vo-configured: ${read('vo-configured')}',
       'hwdec-current: ${read('hwdec-current')}',
