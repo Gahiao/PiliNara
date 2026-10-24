@@ -2187,12 +2187,12 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         ? Theme(data: theme, child: child)
         : child;
     // 页面根参照系：归位目标矩形以此量取（规避路由转场期间的整页偏移）
+    final playerController = plPlayerController;
     return KeyedSubtree(
       key: _pageRootKey,
-      child: HdrHolePunch(
-        controller: plPlayerController!,
-        child: page,
-      ),
+      child: playerController == null
+          ? page
+          : HdrHolePunch(controller: playerController, child: page),
     );
   }
 
