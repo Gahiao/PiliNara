@@ -151,6 +151,9 @@ class MainActivity : AudioServiceActivity() {
                         height = intArg("height"),
                         wantTenBit = boolArg("tenBit"),
                     )
+                    // 创建视频底层时再兜底检查一次 Flutter 表面格式：
+                    // release 混淆后只能按 SurfaceView 类型/tag 识别。
+                    window.decorView.post { ensureFlutterSurfaceTransparent() }
                     result.success(null)
                 }
                 "setRect" -> {
