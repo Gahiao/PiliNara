@@ -230,8 +230,11 @@ class VideoSurfaceHost(
                 mainHandler.post { result.success(null) }
             } else {
                 Thread {
-                    val maxLuma = runCatching {
+                    val data = runCatching {
+                        var sum = 0L
+                        var count = 0
                         var maxValue = 0
+                        var bright = 0
                         val stepX = maxOf(1, bitmap.width / 32)
                         val stepY = maxOf(1, bitmap.height / 18)
                         var y = 0
@@ -244,15 +247,23 @@ class VideoSurfaceHost(
                                     Color.green(pixel),
                                     Color.blue(pixel),
                                 )
+                                sum += value
+                                count++
                                 if (value > maxValue) maxValue = value
+                                if (value > 8) bright++
                                 x += stepX
                             }
                             y += stepY
                         }
-                        maxValue
+                        val mean = if (count > 0) (sum / count).toInt() else 0
+                        mapOf(
+                            "mean" to mean,
+                            "max" to maxValue,
+                            "bright" to bright,
+                        )
                     }.getOrNull()
                     bitmap.recycle()
-                    mainHandler.post { result.success(maxLuma) }
+                    mainHandler.post { result.success(data) }
                 }.apply { isDaemon = true }.start()
             }
         }

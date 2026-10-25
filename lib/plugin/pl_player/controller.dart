@@ -1079,7 +1079,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (native)
         '原生 Surface: wid=${_nativeWid ?? '-'}，'
             'SurfaceView 尺寸=${_nativeSurfaceSize == null ? '-' : '${_nativeSurfaceSize!.$1}x${_nativeSurfaceSize!.$2}'}',
-      if (native) '直通画面采样: ${_lastProbeLuma ?? '-'}（0=Surface 全黑）',
+      if (native)
+        '直通画面采样: mean=${_lastProbeMean ?? '-'} / max=${_lastProbeMax ?? '-'} / '
+            'bright=${_lastProbeBright ?? '-'}（mean≈0 表示 Surface 全黑）',
       if (native) '直通画面矩形: ${nativeContentRect.value ?? '-'}',
       'vo: ${read('vo')}',
       'vo-configured: ${read('vo-configured')}',
@@ -1149,8 +1151,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// HDR 直通画面自检（播放几秒后采样一次，区分解码器黑屏和 Flutter 遮盖）。
   Timer? _nativeProbeTimer;
 
-  /// 最近一次 SurfaceView 画面采样结果（0 表示全黑）。
-  int? _lastProbeLuma;
+  /// 最近一次 SurfaceView 画面采样结果（平均亮度；0 表示全黑）。
+  int? _lastProbeMean;
+  int? _lastProbeMax;
+  int? _lastProbeBright;
 
   /// 原生视频当前在屏幕上的矩形（逻辑像素，全局坐标）。
   ///
@@ -1216,12 +1220,17 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   Future<void> _probeNativeSurface(int attempt) async {
     final owner = _nativeOwner;
     if (owner == null || !nativeSurfaceMode.value) return;
-    final maxLuma = await NativeVideoSurfaceChannel.probe(owner: owner);
-    debugPrint('[HDR] probe maxLuma=$maxLuma');
-    _lastProbeLuma = maxLuma;
-    if (maxLuma == null || maxLuma > 1) return;
+    final data = await NativeVideoSurfaceChannel.probe(owner: owner);
+    final mean = (data?['mean'] as num?)?.toInt();
+    final max = (data?['max'] as num?)?.toInt();
+    final bright = (data?['bright'] as num?)?.toInt();
+    debugPrint('[HDR] probe mean=$mean max=$max bright=$bright');
+    _lastProbeMean = mean;
+    _lastProbeMax = max;
+    _lastProbeBright = bright;
+    if (mean == null || mean > 2) return;
     if (!nativeSurfaceMode.value || _instance == null) return;
-    // 连续两次都全黑才判定解码器没有出画，避免黑场误判。
+    // 连续两次平均亮度都接近全黑才判定解码器没有出画，避免黑场误判。
     if (attempt < 1) {
       _nativeProbeTimer = Timer(const Duration(milliseconds: 1500), () {
         _nativeProbeTimer = null;
@@ -1343,7 +1352,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _nativeResizeTimer = null;
     _nativeProbeTimer?.cancel();
     _nativeProbeTimer = null;
-    _lastProbeLuma = null;
+    _lastProbeMean = null;
+    _lastProbeMax = null;
+    _lastProbeBright = null;
     _nativeOwner = null;
     _nativeWid = null;
     _nativeSurfaceSize = null;

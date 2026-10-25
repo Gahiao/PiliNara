@@ -65,9 +65,13 @@ abstract final class NativeVideoSurfaceChannel {
   static Future<Uint8List?> capture({required int owner}) =>
       channel.invokeMethod<Uint8List>('capture', {'owner': owner});
 
-  /// 采样 SurfaceView 画面，返回 0-255 的最大亮度。
+  /// 采样 SurfaceView 画面，返回 `{mean, max, bright}`：
+  /// * `mean`：采样点平均亮度（0-255）；
+  /// * `max`：最大亮度；
+  /// * `bright`：亮度 > 8 的采样点数量。
   ///
-  /// 返回 0 表示 Surface 本身是黑的（解码器没出画），与 Flutter 遮盖无关。
-  static Future<int?> probe({required int owner}) =>
-      channel.invokeMethod<int>('probe', {'owner': owner});
+  /// `mean` 为 0（或极小）表示 Surface 本身是黑的（解码器没出画），
+  /// 与 Flutter 是否遮盖无关。
+  static Future<Map?> probe({required int owner}) =>
+      channel.invokeMethod<Map>('probe', {'owner': owner});
 }
