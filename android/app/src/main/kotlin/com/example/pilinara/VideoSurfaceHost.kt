@@ -294,11 +294,10 @@ class VideoSurfaceHost(
     private fun buildSurfaceView(requestTenBit: Boolean): SurfaceView {
         val sv = SurfaceView(activity)
         sv.tag = SURFACE_TAG
-        // Flutter 使用 Z 置顶的 FlutterSurfaceView；视频层放在窗口之上、
-        // FlutterSurfaceView 之下（media overlay），这样 Flutter 的透明挖孔
-        // 直接露出视频，不依赖窗口 punch hole 的逐像素透明。
         sv.setZOrderOnTop(false)
-        sv.setZOrderMediaOverlay(true)
+        // 视频层保持在窗口之后，由窗口 punch hole + Z 置顶的 FlutterSurfaceView
+        // 的透明像素透出。media overlay 在部分 ROM 上会盖住 Flutter UI，已回退。
+        sv.setZOrderMediaOverlay(false)
         // 视频在 Flutter 之下，不能吃掉 Flutter 的手势（点击/拖动交给上层）。
         sv.isFocusable = false
         sv.isFocusableInTouchMode = false
