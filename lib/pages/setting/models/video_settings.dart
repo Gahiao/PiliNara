@@ -88,7 +88,8 @@ List<SettingsModel> get videoSettings => [
     subtitle:
         'HDR / 杜比视界片源改用 Flutter 之下的 SurfaceView 直通送显，由解码器直接输出 HDR；'
         'SDR 片源仍走纹理，弹幕/控制栏照常叠加。切换后需重新打开视频生效。'
-        '若个别设备出现黑屏，请关闭此开关或开启「杜比视界兼容模式」后重开视频',
+        '真 HDR 播放时部分设备会整屏切换到 HDR 显示模式（亮度跳变一次），属系统行为；'
+        '若出现黑屏或不想看到切换，请关闭此开关或开启「杜比视界兼容模式」后重开视频',
     leading: const Icon(Icons.hdr_strong),
     setKey: SettingBoxKey.hdrSurface,
     defaultVal: true,

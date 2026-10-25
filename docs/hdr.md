@@ -84,13 +84,32 @@ Flutter 的页面背景、视频 header 的黑色底、以及 `MiniScaffold`/简
 这是「HDR 已出画但画面全黑」的直接原因：原生视频在 Flutter 之下，之前被页面黑底/
 Material 背景盖住了。
 
+### Flutter surface 必须是 TRANSLUCENT
+
+仅把页面画成透明还不够：承载 Flutter 的 `FlutterSurfaceView` 的 buffer format 必须是
+`PixelFormat.TRANSLUCENT`，否则整个 Flutter 表面不透明，挖孔也不会透出底层。
+
+`MainActivity` 在 `onCreate` / `onPostResume` 遍历视图树，发现 Flutter 的 SurfaceView
+不是 TRANSLUCENT 时强制设置并置顶。`HDR 状态诊断` 底部会显示：
+
+* `flutterSurfaceFormatBeforeFix=`：修复前的 format（`1`=RGBA_8888，不透明；
+  `-3`=TRANSLUCENT）；
+* 视图树中每个 SurfaceView 的 `format` 与 `size`。
+
+### 整屏亮度跳变属系统 HDR 模式切换
+
+真 HDR 需要显示面板切到 HDR 模式。部分设备只支持**全局** HDR 模式（而不是按层合成
+HDR/SDR），进入 HDR 播放时整个屏幕（包括 SDR 的弹幕/控件/简介）会变亮一次。
+应用层已经不再调用 `window.setColorMode`，这个切换是系统根据 HDR Surface 的 dataspace
+自动完成的，应用无法消除。不希望出现切换时，关闭「HDR 直通出画」走 8bit 色调映射。
+
 ## 四、mpv 参数（HDR 路径）
 
 ```text
 vo=mediacodec_embed
 hwdec=mediacodec            # mediacodec_embed 必须直通硬解
 wid=<SurfaceView 的 Surface global ref>
-android-surface-size=WxH    # 视频编码尺寸
+android-surface-size=WxH    # SurfaceView 布局尺寸（不是视频编码尺寸）
 vid=auto
 ```
 
