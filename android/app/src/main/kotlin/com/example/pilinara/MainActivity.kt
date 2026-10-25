@@ -1,5 +1,6 @@
 package com.example.pilinara
 
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -66,6 +67,9 @@ class MainActivity : AudioServiceActivity() {
     private fun describeSurface(): String {
         val builder = StringBuilder()
         builder.append("backgroundMode=").append(getBackgroundMode().name)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.append("\nwindowColorMode=").append(window.colorMode)
+        }
         builder
             .append("\nflutterSurfaceFormatBeforeFix=")
             .append(flutterSurfaceFormatBeforeFix)
@@ -143,6 +147,20 @@ class MainActivity : AudioServiceActivity() {
                 "setHdr" -> {
                     // 保留方法名以兼容旧调用；当前实现不再主动切换窗口色彩模式，
                     // 避免整屏高亮闪屏。
+                    result.success(null)
+                }
+                "setWindowHdr" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        runCatching {
+                            window.setColorMode(
+                                if (boolArg("enabled")) {
+                                    ActivityInfo.COLOR_MODE_HDR
+                                } else {
+                                    ActivityInfo.COLOR_MODE_DEFAULT
+                                },
+                            )
+                        }
+                    }
                     result.success(null)
                 }
                 "remove" -> {

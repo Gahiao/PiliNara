@@ -596,6 +596,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 本次播放的 HDR 直通已被画面自检判定为黑屏，自动退回纹理出画。
   bool _hdrDirectFallback = false;
 
+  /// 当前 Activity 窗口是否已被切换到 HDR 色彩模式。
+  bool _windowHdrRequested = false;
+
   /// 是否应该走「视频在 Flutter 之下」的 SurfaceView 出画。
   ///
   /// 只有真正的 HDR 片源才需要它：Flutter 纹理固定 8bit，会丢掉 HDR 元数据；
@@ -1253,6 +1256,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _hdrDirectFallback = true;
     _nativeProbeTimer?.cancel();
     _nativeProbeTimer = null;
+    _updateWindowHdrMode();
     SmartDialog.showToast(
       'HDR 直通出画未检测到画面，已自动切回纹理出画（仅色调映射）',
       displayTime: const Duration(seconds: 4),
@@ -1263,6 +1267,17 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     } else {
       nativeSurfaceMode.value = false;
     }
+  }
+
+  /// 在 HDR 片源加载前就把窗口切到 HDR 模式。
+  ///
+  /// 系统在 HDR Surface 首帧出现时才切显示模式的话，整屏会明显高亮一下；
+  /// 提前切可以让模式切换发生在页面仍是黑屏/加载的阶段。
+  void _updateWindowHdrMode() {
+    final wanted = _wantNativeSurface;
+    if (wanted == _windowHdrRequested) return;
+    _windowHdrRequested = wanted;
+    unawaited(NativeVideoSurfaceChannel.setWindowHdr(enabled: wanted));
   }
 
   /// 更新 SurfaceView 的布局尺寸。
@@ -1469,6 +1484,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (isNewVideo) {
         _hdrDirectFallback = false;
       }
+      // 提前切窗口 HDR 模式：让面板切换发生在加载/黑屏阶段，而不是首帧出现时。
+      _updateWindowHdrMode();
       // 换视频/换P：解除倍速锁定并恢复锁定前速度。
       // 必须先于临时配置重置执行，否则 lastPlaybackSpeed 会被先行覆盖
       await releaseSpeedLock();
