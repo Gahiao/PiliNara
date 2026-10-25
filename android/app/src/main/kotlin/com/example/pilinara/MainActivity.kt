@@ -2,11 +2,9 @@ package com.example.pilinara
 
 import android.content.res.Configuration
 import android.graphics.Color
-import android.graphics.PixelFormat
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
@@ -23,8 +21,6 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : AudioServiceActivity() {
     private lateinit var methodChannel: MethodChannel
     private var videoSurfaceHost: VideoSurfaceHost? = null
-    private var flutterSurfaceFormatBeforeFix: Int? = null
-    private var flutterSurfaceForced = false
 
     /**
      * 透明背景模式：让 Flutter 的 surface 支持逐像素透明且 Z 序置顶，
@@ -62,50 +58,11 @@ class MainActivity : AudioServiceActivity() {
         }.getOrNull()
     }
 
-    /**
-     * 兜底：个别 ROM/嵌入方式下 [getBackgroundMode] 可能没有把 FlutterSurfaceView
-     * 的 format 设为 TRANSLUCENT，Flutter 层就会变成不透明，把下面的 HDR
-     * SurfaceView 完全盖住（采样有画面但屏幕全黑）。这里在窗口创建后再强制一次。
-     */
-    private fun ensureFlutterSurfaceTransparent() {
-        if (flutterSurfaceForced) return
-        val decor = window.decorView as? ViewGroup ?: return
-        var found = false
-        fun walk(view: View) {
-            if (view is SurfaceView && view.tag != VideoSurfaceHost.SURFACE_TAG) {
-                found = true
-                val surfaceFormat = readSurfaceFormat(view.holder)
-                if (flutterSurfaceFormatBeforeFix == null) {
-                    flutterSurfaceFormatBeforeFix = surfaceFormat ?: -999
-                }
-                if (surfaceFormat != PixelFormat.TRANSLUCENT) {
-                    runCatching {
-                        view.holder.setFormat(PixelFormat.TRANSLUCENT)
-                        view.setZOrderOnTop(true)
-                    }.onFailure {
-                        Log.w("MainActivity", "force Flutter surface translucent failed", it)
-                    }
-                }
-            }
-            if (view is ViewGroup) {
-                for (i in 0 until view.childCount) {
-                    walk(view.getChildAt(i))
-                }
-            }
-        }
-        walk(decor)
-        if (found) {
-            flutterSurfaceForced = true
-        }
-    }
-
     /** 诊断：Flutter 层是否透明、背景模式与视图树。 */
     private fun describeSurface(): String {
         val builder = StringBuilder()
         builder.append("backgroundMode=").append(getBackgroundMode().name)
-        builder
-            .append("\nflutterSurfaceFormatBeforeFix=")
-            .append(flutterSurfaceFormatBeforeFix)
+        builder.append("\nrenderMode=").append(getRenderMode().name)
         val decor = window.decorView as? ViewGroup ?: return builder.toString()
         fun walk(view: View, depth: Int) {
             builder.append('\n').append("  ".repeat(depth)).append(view.javaClass.name)
@@ -123,6 +80,9 @@ class MainActivity : AudioServiceActivity() {
                     .append(view.width)
                     .append('x')
                     .append(view.height)
+                if (view.tag == VideoSurfaceHost.SURFACE_TAG) {
+                    builder.append(" [video]")
+                }
             }
             if (view is ViewGroup) {
                 for (i in 0 until view.childCount) {
@@ -171,9 +131,6 @@ class MainActivity : AudioServiceActivity() {
                         height = intArg("height"),
                         wantTenBit = boolArg("tenBit"),
                     )
-                    // 创建视频底层时再兜底检查一次 Flutter 表面格式：
-                    // release 混淆后只能按 SurfaceView 类型/tag 识别。
-                    window.decorView.post { ensureFlutterSurfaceTransparent() }
                     result.success(null)
                 }
                 "setRect" -> {
@@ -231,12 +188,6 @@ class MainActivity : AudioServiceActivity() {
             window.attributes.layoutInDisplayCutoutMode =
                 LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-        window.decorView.post { ensureFlutterSurfaceTransparent() }
-    }
-
-    override fun onPostResume() {
-        super.onPostResume()
-        ensureFlutterSurfaceTransparent()
     }
 
     override fun onUserLeaveHint() {
