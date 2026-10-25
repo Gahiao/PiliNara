@@ -42,9 +42,9 @@ class MainActivity : AudioServiceActivity() {
         fun walk(view: View) {
             if (view is SurfaceView && view.javaClass.name.contains("Flutter")) {
                 if (flutterSurfaceFormatBeforeFix == null) {
-                    flutterSurfaceFormatBeforeFix = view.holder.format
+                    flutterSurfaceFormatBeforeFix = view.holder.surfaceFormat
                 }
-                if (view.holder.format != PixelFormat.TRANSLUCENT) {
+                if (view.holder.surfaceFormat != PixelFormat.TRANSLUCENT) {
                     runCatching {
                         view.holder.setFormat(PixelFormat.TRANSLUCENT)
                         view.setZOrderOnTop(true)
@@ -75,7 +75,7 @@ class MainActivity : AudioServiceActivity() {
             if (view is SurfaceView) {
                 builder
                     .append(" format=")
-                    .append(view.holder.format)
+                    .append(view.holder.surfaceFormat)
                     .append(" size=")
                     .append(view.width)
                     .append('x')
