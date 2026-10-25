@@ -223,6 +223,11 @@ class VideoSurfaceHost(
         val visibility = sv.visibility
         val alpha = sv.alpha.toDouble()
         val parent = sv.parent?.javaClass?.name ?: "-"
+        val windowColorMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            activity.window.colorMode
+        } else {
+            -1
+        }
         val bitmap = try {
             Bitmap.createBitmap(sv.width, sv.height, Bitmap.Config.ARGB_8888)
         } catch (t: Throwable) {
@@ -271,6 +276,7 @@ class VideoSurfaceHost(
                             "vis" to visibility,
                             "alpha" to alpha,
                             "parent" to parent,
+                            "windowColorMode" to windowColorMode,
                         )
                     }.getOrNull()
                     bitmap.recycle()

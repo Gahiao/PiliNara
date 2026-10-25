@@ -78,4 +78,8 @@ abstract final class NativeVideoSurfaceChannel {
   /// 诊断：Flutter 层背景模式、SurfaceView format 与视图树。
   static Future<String?> surfaceInfo() =>
       channel.invokeMethod<String>('surfaceInfo');
+
+  /// 进入 HDR 播放前预切窗口色彩模式，使面板切换发生在加载/黑屏阶段。
+  static Future<void> setWindowHdr({required bool enabled}) =>
+      channel.invokeMethod<void>('setWindowHdr', {'enabled': enabled});
 }

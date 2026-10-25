@@ -596,6 +596,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 本次播放的 HDR 直通已被画面自检判定为黑屏，自动退回纹理出画。
   bool _hdrDirectFallback = false;
 
+  /// 当前窗口是否已被预切到 HDR 色彩模式。
+  bool _windowHdrRequested = false;
+
   /// 是否应该走「视频在 Flutter 之下」的 SurfaceView 出画。
   ///
   /// 只有真正的 HDR 片源才需要它：Flutter 纹理固定 8bit，会丢掉 HDR 元数据；
@@ -1095,7 +1098,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
             'bright=$_lastProbeBright（mean≈0 表示 Surface 全黑）',
       if (_lastProbeShown != null)
         '直通 SurfaceView: shown=$_lastProbeShown / vis=$_lastProbeVisibility / '
-            'alpha=$_lastProbeAlpha / parent=$_lastProbeParent',
+            'alpha=$_lastProbeAlpha / parent=$_lastProbeParent / '
+            'windowColorMode=$_lastProbeWindowColorMode',
       if (native) '直通画面矩形: ${_nativeRectLabel(nativeContentRect.value)}',
       if (native)
         '直通挖孔矩形: ${_nativeRectLabel(nativeHoleRect.value)} / '
@@ -1176,6 +1180,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   int? _lastProbeVisibility;
   double? _lastProbeAlpha;
   String? _lastProbeParent;
+  int? _lastProbeWindowColorMode;
 
   /// 原生视频当前在屏幕上的矩形（逻辑像素，全局坐标）。
   ///
@@ -1255,9 +1260,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     final visibility = (data?['vis'] as num?)?.toInt();
     final alpha = (data?['alpha'] as num?)?.toDouble();
     final parent = data?['parent'] as String?;
+    final windowColorMode = (data?['windowColorMode'] as num?)?.toInt();
     debugPrint(
       '[HDR] probe mean=$mean max=$max bright=$bright '
-      'shown=$shown vis=$visibility alpha=$alpha parent=$parent',
+      'shown=$shown vis=$visibility alpha=$alpha parent=$parent '
+      'windowColorMode=$windowColorMode',
     );
     _lastProbeMean = mean;
     _lastProbeMax = max;
@@ -1266,6 +1273,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _lastProbeVisibility = visibility;
     _lastProbeAlpha = alpha;
     _lastProbeParent = parent;
+    _lastProbeWindowColorMode = windowColorMode;
     if (mean == null || mean > 2) return;
     if (!nativeSurfaceMode.value || _instance == null) return;
     // 连续两次平均亮度都接近全黑才判定解码器没有出画，避免黑场误判。
@@ -1285,6 +1293,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _hdrDirectFallback = true;
     _nativeProbeTimer?.cancel();
     _nativeProbeTimer = null;
+    _updateWindowHdrMode();
     SmartDialog.showToast(
       'HDR 直通出画未检测到画面，已自动切回纹理出画（仅色调映射）',
       displayTime: const Duration(seconds: 4),
@@ -1295,6 +1304,24 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     } else {
       nativeSurfaceMode.value = false;
     }
+  }
+
+  /// 按当前片源预切/复位窗口 HDR 模式。
+  ///
+  /// 在 setDataSource 开始、播放器与首帧出现之前切换，让面板的 HDR 模式
+  /// 切换发生在加载/黑屏阶段，而不是首帧出声时整屏亮一下。
+  void _updateWindowHdrMode() {
+    final wanted = _wantNativeSurface;
+    if (wanted == _windowHdrRequested) return;
+    _windowHdrRequested = wanted;
+    unawaited(NativeVideoSurfaceChannel.setWindowHdr(enabled: wanted));
+  }
+
+  /// 播放页销毁时复位窗口 HDR 模式，避免设置页/首页停留在 HDR 窗口模式。
+  void _resetWindowHdr() {
+    if (!_windowHdrRequested) return;
+    _windowHdrRequested = false;
+    unawaited(NativeVideoSurfaceChannel.setWindowHdr(enabled: false));
   }
 
   /// 更新 SurfaceView 的布局尺寸。
@@ -1501,6 +1528,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (isNewVideo) {
         _hdrDirectFallback = false;
       }
+      // 在创建播放器/首帧之前预切窗口 HDR 模式。
+      _updateWindowHdrMode();
       // 换视频/换P：解除倍速锁定并恢复锁定前速度。
       // 必须先于临时配置重置执行，否则 lastPlaybackSpeed 会被先行覆盖
       await releaseSpeedLock();
@@ -3211,6 +3240,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   void dispose() {
+    // 离开播放页时复位窗口 HDR 模式，避免设置页/首页留在 HDR 窗口模式。
+    _resetWindowHdr();
     _hdrSnapshotTimer?.cancel();
     // 注意：不要在这里抓快照。销毁过程中 surfaceDestroyed 会把 vo 置回 null，
     // 抓到的会是「拆机态」。播放中每 5 秒的快照已经足够还原真实状态。
