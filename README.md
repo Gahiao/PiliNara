@@ -25,6 +25,7 @@
 
 ## 项目说明
 - 本项目是基于[PiliNara](https://github.com/Starfallan/PiliNara)进行修改的,做了一些自用的改动.
+- HDR完全由AI实现
 - 本仓库保留了PiliPlus&PiliNara的所有功能,并在此基础上进行了部分自用的优化和调整.支持导入PiliPlus的设置和数据，也应该支持了导出设置和数据到PiliPlus.
 - 本项目会定期同步[PiliNara](https://github.com/Starfallan/PiliNara)的更新.
 - 本项目仅供个人学习和测试使用，目前只打包了安卓版本,如有需要请自行Fork后编译.
@@ -39,6 +40,7 @@ Fork特性：
 
 - [x] 添加当应用启动时/重新回到前台时识别剪切板BV号/链接并显示跳转选项/直接跳转的功能
 - [x] 勉强能用的刷视频功能
+- [x] HDR
 
 ## 适配平台
 - [x] Android
