@@ -1,7 +1,7 @@
 // ignore_for_file: constant_identifier_names
 
 enum VideoDecodeFormatType {
-  DVH1(['dvh1']),
+  DVH1(['dvh1', 'dvhe']),
   AV1(['av01']),
   HEVC(['hev1', 'hvc1']),
   AVC(['avc1']),

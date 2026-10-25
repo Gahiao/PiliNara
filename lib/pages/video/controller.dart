@@ -889,6 +889,21 @@ class VideoDetailController extends GetxController
       return fallback;
     }
 
+    // 杜比视界画质优先选 dvh1/dvhe 流：设备支持 DoVi 时让解码器按
+    // Dolby Vision 配置，而不是回落到普通 HEVC；profile 5 才能正确还原。
+    if (qa == VideoQuality.dolbyVision.code) {
+      for (final video in videoList) {
+        final codecs = video.codecs;
+        if (codecs != null &&
+            VideoDecodeFormatType.DVH1.codes.any(codecs.startsWith)) {
+          if (setCodecs) {
+            currentDecodeFormats = VideoDecodeFormatType.DVH1;
+          }
+          return video;
+        }
+      }
+    }
+
     final currentCodes = currentDecodeFormats.codes;
     VideoItem? bestVideo;
     int bestIndex = preferCodecs.length;
