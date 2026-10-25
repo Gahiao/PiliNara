@@ -107,9 +107,47 @@ class _HdrHolePunchState extends State<HdrHolePunch> {
         Positioned.fill(
           child: SizedBox.expand(key: _rootKey, child: widget.child),
         ),
+        // 临时诊断：画在页面内容之上，确保即使页面不透明也能看到挖孔位置。
+        if (_HoleDebugOverlayPainter.enabled)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(painter: _HoleDebugOverlayPainter(_hole)),
+            ),
+          ),
       ],
     );
   }
+}
+
+/// 临时诊断：在页面内容之上标出挖孔。
+///
+/// * 孔有效：画红色矩形边框（位置应恰好盖住视频区域）；
+/// * 孔为空：画整屏红框，表示根节点没有算出孔。
+class _HoleDebugOverlayPainter extends CustomPainter {
+  const _HoleDebugOverlayPainter(this.hole);
+
+  static const bool enabled = true;
+
+  final Rect? hole;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final full = Offset.zero & size;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..color = const Color(0xFFFF0000);
+    final hole = this.hole;
+    if (hole == null || hole.isEmpty) {
+      canvas.drawRect(full.deflate(3), paint);
+      return;
+    }
+    canvas.drawRect(hole, paint);
+  }
+
+  @override
+  bool shouldRepaint(_HoleDebugOverlayPainter oldDelegate) =>
+      oldDelegate.hole != hole;
 }
 
 class _HolePunchPainter extends CustomPainter {
