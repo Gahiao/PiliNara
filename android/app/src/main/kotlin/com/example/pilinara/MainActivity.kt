@@ -41,10 +41,16 @@ class MainActivity : AudioServiceActivity() {
         val decor = window.decorView as? ViewGroup ?: return
         fun walk(view: View) {
             if (view is SurfaceView && view.javaClass.name.contains("Flutter")) {
-                if (flutterSurfaceFormatBeforeFix == null) {
-                    flutterSurfaceFormatBeforeFix = view.holder.surfaceFormat
+                val surfaceFormat = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    view.holder.surfaceFormat
+                } else {
+                    // API 26 以下没有 getSurfaceFormat，直接强制设置格式。
+                    -999
                 }
-                if (view.holder.surfaceFormat != PixelFormat.TRANSLUCENT) {
+                if (flutterSurfaceFormatBeforeFix == null) {
+                    flutterSurfaceFormatBeforeFix = surfaceFormat
+                }
+                if (surfaceFormat != PixelFormat.TRANSLUCENT) {
                     runCatching {
                         view.holder.setFormat(PixelFormat.TRANSLUCENT)
                         view.setZOrderOnTop(true)
@@ -73,9 +79,13 @@ class MainActivity : AudioServiceActivity() {
         fun walk(view: View, depth: Int) {
             builder.append('\n').append("  ".repeat(depth)).append(view.javaClass.name)
             if (view is SurfaceView) {
+                builder.append(" format=")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    builder.append(view.holder.surfaceFormat)
+                } else {
+                    builder.append('?')
+                }
                 builder
-                    .append(" format=")
-                    .append(view.holder.surfaceFormat)
                     .append(" size=")
                     .append(view.width)
                     .append('x')
