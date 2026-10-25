@@ -1066,6 +1066,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         '${rect.width.toStringAsFixed(0)}x${rect.height.toStringAsFixed(0)}';
   }
 
+  String _sizeLabel(ui.Size? size) {
+    if (size == null) return '-';
+    return '${size.width.toStringAsFixed(0)}x${size.height.toStringAsFixed(0)}';
+  }
+
   String get hdrDebugInfo {
     final player = _videoPlayerController;
     if (player == null) return lastHdrInfo;
@@ -1092,6 +1097,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         '直通 SurfaceView: shown=$_lastProbeShown / vis=$_lastProbeVisibility / '
             'alpha=$_lastProbeAlpha / parent=$_lastProbeParent',
       if (native) '直通画面矩形: ${_nativeRectLabel(nativeContentRect.value)}',
+      if (native)
+        '直通挖孔矩形: ${_nativeRectLabel(nativeHoleRect.value)} / '
+            '页面尺寸: ${_sizeLabel(nativePageSize.value)}',
       'vo: ${read('vo')}',
       'vo-configured: ${read('vo-configured')}',
       'hwdec-current: ${read('hwdec-current')}',
@@ -1176,6 +1184,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   final ValueNotifier<ui.Rect?> nativeContentRect = ValueNotifier<ui.Rect?>(
     null,
   );
+
+  /// 页面根节点实际挖出的透明矩形（页面本地坐标），仅用于诊断。
+  final ValueNotifier<ui.Rect?> nativeHoleRect = ValueNotifier<ui.Rect?>(null);
+
+  /// 页面根节点尺寸，仅用于诊断挖孔是否落在页面内。
+  final ValueNotifier<ui.Size?> nativePageSize = ValueNotifier<ui.Size?>(null);
 
   /// 原生 Surface 就绪信号：自动播放前等待它，避免「先出声音、黑屏几秒」。
   Completer<void>? _nativeSurfaceReady;

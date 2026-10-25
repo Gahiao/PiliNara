@@ -90,6 +90,10 @@ class _HdrHolePunchState extends State<HdrHolePunch> {
     if (hole != _hole) {
       setState(() => _hole = hole);
     }
+    widget.controller.nativeHoleRect.value = hole;
+    widget.controller.nativePageSize.value = box is RenderBox && box.hasSize
+        ? box.size
+        : null;
   }
 
   @override
@@ -110,6 +114,13 @@ class _HdrHolePunchState extends State<HdrHolePunch> {
 
 class _HolePunchPainter extends CustomPainter {
   const _HolePunchPainter(this.hole);
+
+  /// 临时诊断：在挖孔区域画半透明绿底 + 红边。
+  ///
+  /// 这两笔在页面内容之下：
+  /// * 能看到绿色/红边 => Flutter 页面在挖孔处是透明的，问题在原生/窗口合成；
+  /// * 看不到 => 页面在挖孔处仍有不透明绘制，需要继续找 Flutter 层。
+  static const bool _debug = true;
 
   final Rect? hole;
 
@@ -145,6 +156,19 @@ class _HolePunchPainter extends CustomPainter {
         Rect.fromLTRB(rect.right, rect.top, full.right, rect.bottom),
         paint,
       );
+    if (_debug) {
+      canvas.drawRect(
+        rect,
+        Paint()..color = const Color(0x4400FF00),
+      );
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = const Color(0xFFFF0000),
+      );
+    }
   }
 
   @override
