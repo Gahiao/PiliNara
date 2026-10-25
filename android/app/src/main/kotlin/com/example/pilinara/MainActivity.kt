@@ -9,9 +9,11 @@ import android.os.Bundle
 import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager.LayoutParams
+import android.widget.ImageView
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs
 import io.flutter.embedding.engine.FlutterEngine
@@ -95,6 +97,12 @@ class MainActivity : AudioServiceActivity() {
         val decor = window.decorView as? ViewGroup ?: return builder.toString()
         fun walk(view: View, depth: Int) {
             builder.append('\n').append("  ".repeat(depth)).append(view.javaClass.name)
+            if (view is TextureView) {
+                builder.append(" [TextureView]")
+            }
+            if (view is ImageView) {
+                builder.append(" [ImageView]")
+            }
             if (view is SurfaceView) {
                 builder
                     .append(" format=")
