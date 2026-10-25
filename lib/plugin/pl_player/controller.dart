@@ -1079,9 +1079,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (native)
         '原生 Surface: wid=${_nativeWid ?? '-'}，'
             'SurfaceView 尺寸=${_nativeSurfaceSize == null ? '-' : '${_nativeSurfaceSize!.$1}x${_nativeSurfaceSize!.$2}'}',
-      if (native)
-        '直通画面采样: mean=${_lastProbeMean ?? '-'} / max=${_lastProbeMax ?? '-'} / '
-            'bright=${_lastProbeBright ?? '-'}（mean≈0 表示 Surface 全黑）',
+      if (_lastProbeMean != null)
+        '直通画面采样: mean=$_lastProbeMean / max=$_lastProbeMax / '
+            'bright=$_lastProbeBright（mean≈0 表示 Surface 全黑）',
       if (native) '直通画面矩形: ${nativeContentRect.value ?? '-'}',
       'vo: ${read('vo')}',
       'vo-configured: ${read('vo-configured')}',
@@ -1211,7 +1211,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   void _scheduleNativeProbe() {
     if (!nativeSurfaceMode.value || !isHdrSource || _hdrDirectFallback) return;
     _nativeProbeTimer?.cancel();
-    _nativeProbeTimer = Timer(const Duration(seconds: 4), () {
+    _nativeProbeTimer = Timer(const Duration(milliseconds: 2500), () {
       _nativeProbeTimer = null;
       _probeNativeSurface(0);
     });
@@ -1232,7 +1232,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (!nativeSurfaceMode.value || _instance == null) return;
     // 连续两次平均亮度都接近全黑才判定解码器没有出画，避免黑场误判。
     if (attempt < 1) {
-      _nativeProbeTimer = Timer(const Duration(milliseconds: 1500), () {
+      _nativeProbeTimer = Timer(const Duration(milliseconds: 1000), () {
         _nativeProbeTimer = null;
         _probeNativeSurface(attempt + 1);
       });
@@ -1352,9 +1352,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _nativeResizeTimer = null;
     _nativeProbeTimer?.cancel();
     _nativeProbeTimer = null;
-    _lastProbeMean = null;
-    _lastProbeMax = null;
-    _lastProbeBright = null;
     _nativeOwner = null;
     _nativeWid = null;
     _nativeSurfaceSize = null;
