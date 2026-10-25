@@ -72,29 +72,44 @@ Dart 侧 `lib/plugin/pl_player/utils/native_video_surface.dart`：
 布局不一致时会直接黑屏（例如把 3840×2160 写到一个 1080×607 的 Surface 上）。
 布局尺寸变化做了 200ms 防抖，小窗拖动/全屏动画期间不会逐帧重建视频输出。
 
-### 页面背景必须透明
+### 页面/视频控件不能有不透明底色
 
-Flutter 的页面背景、视频 header 的黑色底、以及 `MiniScaffold`/简介面板等任何不透明
-绘制都会盖住底层的 SurfaceView（它位于整个 Flutter surface 之下）。因此视频页：
+原生视频在 Flutter surface 之下，Flutter 场景里任何不透明绘制都会盖住它。视频页：
 
-* `SimpleScaffold` 的 Material 改为透明，视频 header 的黑底移除；
+* `SimpleScaffold` 的 Material 透明，视频 header 的黑底移除；
 * 非视频区域（简介/评论/侧栏/小窗）显式加回主题表面色背景；
-* 全屏/横屏/竖屏/近似方形布局都已覆盖。
+* `PLVideoPlayer` 的 `_videoWidget` 在 native 模式下透明；
+* **最容易漏的一层**：`videoPlayer()` 的 `Stack` 里有一层铺满视频区的
+  `const ColoredBox(color: Colors.black)`。它在视频控件之下、原生视频之上，
+  HDR 直通时必须跳过（`if (plPlayerController?.useNativeSurface != true)`），
+  否则会出现「挖孔正确、采样 mean=227、孔内仍然全黑」。
+  这是最终定位到的直接原因。
+* 播放页根节点用 `HdrHolePunch` 铺黑，只把视频矩形挖成透明。
 
-这是「HDR 已出画但画面全黑」的直接原因：原生视频在 Flutter 之下，之前被页面黑底/
-Material 背景盖住了。
+### Flutter 必须用 surface 渲染模式（FlutterSurfaceView）
 
-### Flutter surface 必须是 TRANSLUCENT
+`FlutterActivity` 的默认实现是：
 
-仅把页面画成透明还不够：承载 Flutter 的 `FlutterSurfaceView` 的 buffer format 必须是
-`PixelFormat.TRANSLUCENT`，否则整个 Flutter 表面不透明，挖孔也不会透出底层。
+```java
+getRenderMode() {
+  return getBackgroundMode() == opaque ? RenderMode.surface : RenderMode.texture;
+}
+```
 
-`MainActivity` 在 `onCreate` / `onPostResume` 遍历视图树，发现 Flutter 的 SurfaceView
-不是 TRANSLUCENT 时强制设置并置顶。`HDR 状态诊断` 底部会显示：
+把 `getBackgroundMode()` 设为 `transparent` 后，默认会使用 **FlutterTextureView**。
+TextureView 属于窗口内部的一层，窗口本身不透明，无法透出窗口之后的视频
+SurfaceView（表现为采样有画面但屏幕全黑）。因此 `MainActivity` 必须同时覆盖：
 
-* `flutterSurfaceFormatBeforeFix=`：修复前的 format（`1`=RGBA_8888，不透明；
-  `-3`=TRANSLUCENT）；
-* 视图树中每个 SurfaceView 的 `format` 与 `size`。
+```kotlin
+override fun getBackgroundMode() = BackgroundMode.transparent
+override fun getRenderMode() = RenderMode.surface
+```
+
+`surface` 模式下 delegate 会创建 `FlutterSurfaceView(context, transparent = true)`，
+它自己会设置 `PixelFormat.TRANSPARENT(-2)` 并 `setZOrderOnTop(true)`；不要再强行
+改成 `TRANSLUCENT(-3)`。HDR 状态诊断会显示 `backgroundMode` / `renderMode` 以及
+视图树中每个 SurfaceView 的 `format` / `size`（`getFormat` 在 compileSdk 37 的
+stub 中已移除，运行时用反射读取，读不到显示 `?`）。
 
 ### 整屏亮度跳变属系统 HDR 模式切换
 
