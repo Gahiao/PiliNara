@@ -16,6 +16,7 @@ import android.view.WindowManager.LayoutParams
 import android.widget.ImageView
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs
+import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -35,6 +36,17 @@ class MainActivity : AudioServiceActivity() {
      */
     override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode =
         FlutterActivityLaunchConfigs.BackgroundMode.transparent
+
+    /**
+     * 必须强制 surface 渲染模式。
+     *
+     * FlutterActivity 的默认实现是：backgroundMode != opaque 时返回
+     * RenderMode.texture。TextureView 属于窗口内的一层，窗口本身不透明，
+     * 会把位于窗口之后的 HDR 视频 SurfaceView 完全盖住（采样有画面但全黑）。
+     * 只有 FlutterSurfaceView（RenderMode.surface）才能以 TRANSLUCENT + Z 置顶
+     * 的方式叠在视频 SurfaceView 之上，露出挖孔区域。
+     */
+    override fun getRenderMode(): RenderMode = RenderMode.surface
 
     /**
      * SurfaceHolder.getFormat() 在 compileSdk 37 的 stub 里已被移除，
