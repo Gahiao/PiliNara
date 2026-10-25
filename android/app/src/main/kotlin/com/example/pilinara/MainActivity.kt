@@ -19,6 +19,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : AudioServiceActivity() {
     private lateinit var methodChannel: MethodChannel
     private var videoSurfaceHost: VideoSurfaceHost? = null
+    private var flutterSurfaceFormatBeforeFix: Int? = null
 
     /**
      * 透明背景模式：让 Flutter 的 surface 支持逐像素透明且 Z 序置顶，
@@ -40,6 +41,9 @@ class MainActivity : AudioServiceActivity() {
         val decor = window.decorView as? ViewGroup ?: return
         fun walk(view: View) {
             if (view is SurfaceView && view.javaClass.name.contains("Flutter")) {
+                if (flutterSurfaceFormatBeforeFix == null) {
+                    flutterSurfaceFormatBeforeFix = view.holder.format
+                }
                 if (view.holder.format != PixelFormat.TRANSLUCENT) {
                     runCatching {
                         view.holder.setFormat(PixelFormat.TRANSLUCENT)
@@ -62,6 +66,9 @@ class MainActivity : AudioServiceActivity() {
     private fun describeSurface(): String {
         val builder = StringBuilder()
         builder.append("backgroundMode=").append(getBackgroundMode().name)
+        builder
+            .append("\nflutterSurfaceFormatBeforeFix=")
+            .append(flutterSurfaceFormatBeforeFix)
         val decor = window.decorView as? ViewGroup ?: return builder.toString()
         fun walk(view: View, depth: Int) {
             builder.append('\n').append("  ".repeat(depth)).append(view.javaClass.name)
