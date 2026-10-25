@@ -58,7 +58,7 @@ class MainActivity : AudioServiceActivity() {
         val decor = window.decorView as? ViewGroup ?: return
         var found = false
         fun walk(view: View) {
-            if (view is SurfaceView && view.javaClass.name.contains("Flutter")) {
+            if (view is SurfaceView && view.tag != VideoSurfaceHost.SURFACE_TAG) {
                 found = true
                 val surfaceFormat = readSurfaceFormat(view.holder)
                 if (flutterSurfaceFormatBeforeFix == null) {

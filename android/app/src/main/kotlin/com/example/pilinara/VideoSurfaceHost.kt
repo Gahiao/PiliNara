@@ -43,6 +43,9 @@ class VideoSurfaceHost(
     companion object {
         private const val TAG = "VideoSurfaceHost"
 
+        /** 标记 HDR 视频自己的 SurfaceView，避免透明化时误伤。 */
+        const val SURFACE_TAG = "pilinara_hdr_video_surface"
+
         /** 页面/小窗切换时延迟销毁，等待新 owner 接管，避免 Surface 反复创建。 */
         private const val TEARDOWN_DELAY_MS = 400L
 
@@ -282,6 +285,7 @@ class VideoSurfaceHost(
 
     private fun buildSurfaceView(requestTenBit: Boolean): SurfaceView {
         val sv = SurfaceView(activity)
+        sv.tag = SURFACE_TAG
         sv.setZOrderOnTop(false)
         sv.setZOrderMediaOverlay(false)
         // 视频在 Flutter 之下，不能吃掉 Flutter 的手势（点击/拖动交给上层）。
