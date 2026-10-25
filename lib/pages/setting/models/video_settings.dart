@@ -113,7 +113,9 @@ List<SettingsModel> get videoSettings => [
   ),
   SwitchModel(
     title: '杜比视界兼容模式',
-    subtitle: '部分设备无法硬解杜比视界（Dolby Vision）元数据，开启后在存在同分辨率 HDR10 片源时自动改用 HDR10',
+    subtitle:
+        'profile 5 杜比视界在当前直通路径下会被当成 SDR 导致偏色，存在同分辨率 HDR10 片源时会自动改用 HDR10；'
+        '开启本开关后 profile 8 杜比视界也改用 HDR10（适用于设备无法处理 DoVi 元数据的情况）',
     leading: const Icon(Icons.brightness_high),
     setKey: SettingBoxKey.dolbyVisionFallback,
     defaultVal: false,

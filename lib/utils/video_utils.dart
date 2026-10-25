@@ -214,17 +214,15 @@ abstract final class VideoUtils {
 
   /// 杜比视界兼容模式。
   ///
-  /// 部分设备的硬件解码器无法处理 Dolby Vision 的 RPU 元数据（表现为黑屏、
-  /// 偏色或花屏），开启该选项后若存在分辨率不低于杜比视界流的 HDR10
-  /// （画质 id `125`）片源，则改用 HDR10，以保证正常出画。
+  /// profile 5 使用 IPTPQc2，当前 `mediacodec_embed` 直通路径无法解析 RPU，
+  /// 会按 SDR（bt.709/bt.1886）出画导致偏色；因此即使兼容模式关闭，只要存在
+  /// 分辨率不低于杜比流的 HDR10（画质 id `125`）片源，也自动改用 HDR10。
+  /// 兼容模式开启时则对所有 DoVi（含 profile 8）都回退到 HDR10。
   static int _resolveDolbyVisionFallback(
     List<VideoItem> videoList,
     int quality,
   ) {
-    if (quality != VideoQuality.dolbyVision.code ||
-        !Pref.dolbyVisionFallback) {
-      return quality;
-    }
+    if (quality != VideoQuality.dolbyVision.code) return quality;
 
     VideoItem? dolbyVision;
     VideoItem? hdr;
@@ -236,7 +234,11 @@ abstract final class VideoUtils {
       }
     }
 
-    if (dolbyVision == null || hdr == null) return quality;
+    if (dolbyVision == null) return quality;
+    final codecs = dolbyVision.codecs ?? '';
+    final isProfile5 = codecs.contains('.05.');
+    if (!Pref.dolbyVisionFallback && !isProfile5) return quality;
+    if (hdr == null) return quality;
     if ((hdr.height ?? 0) < (dolbyVision.height ?? 0)) return quality;
     return VideoQuality.hdr.code;
   }
