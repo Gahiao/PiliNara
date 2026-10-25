@@ -7,6 +7,7 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
@@ -20,6 +21,7 @@ class MainActivity : AudioServiceActivity() {
     private lateinit var methodChannel: MethodChannel
     private var videoSurfaceHost: VideoSurfaceHost? = null
     private var flutterSurfaceFormatBeforeFix: Int? = null
+    private var flutterSurfaceForced = false
 
     /**
      * 透明背景模式：让 Flutter 的 surface 支持逐像素透明且 Z 序置顶，
@@ -33,22 +35,34 @@ class MainActivity : AudioServiceActivity() {
         FlutterActivityLaunchConfigs.BackgroundMode.transparent
 
     /**
+     * SurfaceHolder.getFormat() 在 compileSdk 37 的 stub 里已被移除，
+     * 运行时仍然存在，这里用反射读取用于诊断（读不到返回 null）。
+     */
+    private fun readSurfaceFormat(holder: SurfaceHolder): Int? {
+        return runCatching {
+            val method = holder.javaClass.getMethod("getFormat")
+            (method.invoke(holder) as? Number)?.toInt()
+        }.recoverCatching {
+            val method = holder.javaClass.getMethod("getSurfaceFormat")
+            (method.invoke(holder) as? Number)?.toInt()
+        }.getOrNull()
+    }
+
+    /**
      * 兜底：个别 ROM/嵌入方式下 [getBackgroundMode] 可能没有把 FlutterSurfaceView
      * 的 format 设为 TRANSLUCENT，Flutter 层就会变成不透明，把下面的 HDR
      * SurfaceView 完全盖住（采样有画面但屏幕全黑）。这里在窗口创建后再强制一次。
      */
     private fun ensureFlutterSurfaceTransparent() {
+        if (flutterSurfaceForced) return
         val decor = window.decorView as? ViewGroup ?: return
+        var found = false
         fun walk(view: View) {
             if (view is SurfaceView && view.javaClass.name.contains("Flutter")) {
-                val surfaceFormat = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    view.holder.surfaceFormat
-                } else {
-                    // API 26 以下没有 getSurfaceFormat，直接强制设置格式。
-                    -999
-                }
+                found = true
+                val surfaceFormat = readSurfaceFormat(view.holder)
                 if (flutterSurfaceFormatBeforeFix == null) {
-                    flutterSurfaceFormatBeforeFix = surfaceFormat
+                    flutterSurfaceFormatBeforeFix = surfaceFormat ?: -999
                 }
                 if (surfaceFormat != PixelFormat.TRANSLUCENT) {
                     runCatching {
@@ -66,6 +80,9 @@ class MainActivity : AudioServiceActivity() {
             }
         }
         walk(decor)
+        if (found) {
+            flutterSurfaceForced = true
+        }
     }
 
     /** 诊断：Flutter 层是否透明、背景模式与视图树。 */
@@ -79,13 +96,9 @@ class MainActivity : AudioServiceActivity() {
         fun walk(view: View, depth: Int) {
             builder.append('\n').append("  ".repeat(depth)).append(view.javaClass.name)
             if (view is SurfaceView) {
-                builder.append(" format=")
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    builder.append(view.holder.surfaceFormat)
-                } else {
-                    builder.append('?')
-                }
                 builder
+                    .append(" format=")
+                    .append(readSurfaceFormat(view.holder) ?: "?")
                     .append(" size=")
                     .append(view.width)
                     .append('x')
