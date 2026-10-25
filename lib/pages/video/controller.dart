@@ -977,7 +977,10 @@ class VideoDetailController extends GetxController
       ..isHdrSource = !isFileSource && firstVideo.quality.isHdr
       ..isDolbyVisionSource =
           !isFileSource &&
-          firstVideo.quality.code == VideoQuality.dolbyVision.code;
+          firstVideo.quality.code == VideoQuality.dolbyVision.code
+      ..isHdrVividSource =
+          !isFileSource &&
+          firstVideo.quality.code == VideoQuality.hdrVivid.code;
     await plPlayerController.setDataSource(
       isFileSource
           ? FileSource(

@@ -597,6 +597,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 否则会覆盖掉系统/面板的杜比视界处理，导致颜色异常。
   bool isDolbyVisionSource = false;
 
+  /// 当前片源是否为 HDR Vivid；同样不预切 HDR 窗口模式。
+  bool isHdrVividSource = false;
+
   /// 本次播放的 HDR 直通已被画面自检判定为黑屏，自动退回纹理出画。
   bool _hdrDirectFallback = false;
 
@@ -1124,7 +1127,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       'HDR 开关: ${Pref.enableHdr ? '开' : '关'}，'
           '直通出画: ${Pref.hdrSurface ? '开' : '关'}，'
           '后端: ${Pref.hdrBackend}',
-      '片源判定: ${isHdrSource ? (isDolbyVisionSource ? 'HDR / 杜比视界' : 'HDR') : 'SDR'}',
+      '片源判定: ${isHdrSource ? (isDolbyVisionSource ? 'HDR / 杜比视界' : (isHdrVividSource ? 'HDR Vivid' : 'HDR')) : 'SDR'}',
     ].join('\n');
   }
 
@@ -1315,9 +1318,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 在 setDataSource 开始、播放器与首帧出现之前切换，让面板的 HDR 模式
   /// 切换发生在加载/黑屏阶段，而不是首帧出声时整屏亮一下。
   void _updateWindowHdrMode() {
-    // 杜比视界不预切窗口 HDR 模式：让系统按 DoVi 元数据切到正确的显示模式，
-    // 强行 COLOR_MODE_HDR 会变成 HDR10，导致杜比色彩异常。
-    final wanted = _wantNativeSurface && !isDolbyVisionSource;
+    // 杜比视界/HDR Vivid 不预切窗口 HDR 模式：让系统按片源元数据切到正确的
+    // 显示模式，强行 COLOR_MODE_HDR 会变成 HDR10，导致颜色异常。
+    final wanted =
+        _wantNativeSurface && !isDolbyVisionSource && !isHdrVividSource;
     if (wanted == _windowHdrRequested) return;
     _windowHdrRequested = wanted;
     unawaited(NativeVideoSurfaceChannel.setWindowHdr(enabled: wanted));
