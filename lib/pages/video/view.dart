@@ -2403,12 +2403,15 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         child: Stack(
       clipBehavior: Clip.none,
       children: [
-        const Positioned.fill(
-          child: ColoredBox(
-            color: Colors.black,
-            isAntiAlias: false,
+        // HDR 直通时视频由 Flutter 之下的 SurfaceView 输出；这层黑底会直接
+        // 盖住原生画面，必须去掉。SDR 纹理出画仍保留黑底。
+        if (plPlayerController?.useNativeSurface != true)
+          const Positioned.fill(
+            child: ColoredBox(
+              color: Colors.black,
+              isAntiAlias: false,
+            ),
           ),
-        ),
 
         plPlayer(width: width, height: height),
 
