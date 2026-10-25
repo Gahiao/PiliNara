@@ -212,12 +212,14 @@ abstract final class VideoUtils {
     return resolveDolbyVisionFallback(videoList, quality);
   }
 
-  /// 杜比视界兼容模式。
+  /// 杜比视界兼容模式（仅 profile 5）。
   ///
   /// profile 5 使用 IPTPQc2，当前 `mediacodec_embed` 直通路径无法解析 RPU，
-  /// 会按 SDR（bt.709/bt.1886）出画导致偏色；因此即使兼容模式关闭，只要存在
-  /// 分辨率不低于杜比流的 HDR10（画质 id `125`）片源，也自动改用 HDR10。
-  /// 兼容模式开启时则对所有 DoVi（含 profile 8）都回退到 HDR10。
+  /// 会按 SDR（bt.709/bt.1886）出画导致偏色；开启兼容模式后，若存在分辨率
+  /// 不低于杜比流的 HDR10（画质 id `125`）片源，则改用 HDR10。
+  ///
+  /// profile 8 / 8.4 带 HDR10/HLG 兼容基础层，兼容模式**不**回退它们，
+  /// 始终保留杜比视界直通。
   static int resolveDolbyVisionFallback(
     List<VideoItem> videoList,
     int quality,
@@ -236,8 +238,9 @@ abstract final class VideoUtils {
 
     if (dolbyVision == null) return quality;
     final codecs = dolbyVision.codecs ?? '';
-    final isProfile5 = codecs.contains('.05.');
-    if (!Pref.dolbyVisionFallback && !isProfile5) return quality;
+    // 只处理 profile 5；profile 8/8.4 保留 DoVi。
+    if (!codecs.contains('.05.')) return quality;
+    if (!Pref.dolbyVisionFallback) return quality;
     if (hdr == null) return quality;
     if ((hdr.height ?? 0) < (dolbyVision.height ?? 0)) return quality;
     return VideoQuality.hdr.code;
