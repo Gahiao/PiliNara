@@ -18,7 +18,7 @@
 <br/>
 <img src="assets/screenshots/main_screen.png" width="96%" alt="home" />
 <br/>
-</div>
+
 
 
 <br/>

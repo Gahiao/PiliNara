@@ -881,6 +881,16 @@ class VideoDetailController extends GetxController
   VideoItem findVideoByQa(int qa, {bool setCodecs = false}) {
     /// 根据currentVideoQa和currentDecodeFormats 重新设置videoUrl
     final allVideos = data.dash!.video!;
+    // 手动选 126 时也要应用杜比兼容回退；否则设置里的兼容模式对
+    // 手动选择杜比画质完全无效。
+    if (qa == VideoQuality.dolbyVision.code) {
+      final adjusted = VideoUtils.resolveDolbyVisionFallback(allVideos, qa);
+      if (adjusted != qa) {
+        qa = adjusted;
+        currentVideoQa.value = VideoQuality.fromCode(qa);
+        SmartDialog.showToast('已按杜比视界兼容设置改用 HDR10 片源');
+      }
+    }
     final videoList = allVideos.where((i) => i.id == qa).toList();
 
     if (videoList.isEmpty) {

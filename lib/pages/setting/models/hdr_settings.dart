@@ -115,6 +115,7 @@ List<SettingsModel> get hdrSettings => [
     leading: const Icon(Icons.brightness_high),
     setKey: SettingBoxKey.dolbyVisionFallback,
     defaultVal: false,
+    onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
   ),
   NormalModel(
     title: 'HDR 状态诊断',

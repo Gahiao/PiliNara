@@ -209,7 +209,7 @@ abstract final class VideoUtils {
       quality = videoList.findTargetMedia((e) => e.id, preferQuality).quality.code;
     }
 
-    return _resolveDolbyVisionFallback(videoList, quality);
+    return resolveDolbyVisionFallback(videoList, quality);
   }
 
   /// 杜比视界兼容模式。
@@ -218,7 +218,7 @@ abstract final class VideoUtils {
   /// 会按 SDR（bt.709/bt.1886）出画导致偏色；因此即使兼容模式关闭，只要存在
   /// 分辨率不低于杜比流的 HDR10（画质 id `125`）片源，也自动改用 HDR10。
   /// 兼容模式开启时则对所有 DoVi（含 profile 8）都回退到 HDR10。
-  static int _resolveDolbyVisionFallback(
+  static int resolveDolbyVisionFallback(
     List<VideoItem> videoList,
     int quality,
   ) {
