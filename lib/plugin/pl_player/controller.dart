@@ -600,6 +600,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 当前片源是否为 HDR Vivid；同样不预切 HDR 窗口模式。
   bool isHdrVividSource = false;
 
+  /// 当前选中视频流的 codecs 字符串（用于诊断 DoVi profile 5/8）。
+  String? sourceCodecs;
+
   /// 本次播放的 HDR 直通已被画面自检判定为黑屏，自动退回纹理出画。
   bool _hdrDirectFallback = false;
 
@@ -1128,6 +1131,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           '直通出画: ${Pref.hdrSurface ? '开' : '关'}，'
           '后端: ${Pref.hdrBackend}',
       '片源判定: ${isHdrSource ? (isDolbyVisionSource ? 'HDR / 杜比视界' : (isHdrVividSource ? 'HDR Vivid' : 'HDR')) : 'SDR'}',
+      if (sourceCodecs != null) '片源 codecs: $sourceCodecs',
     ].join('\n');
   }
 
