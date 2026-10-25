@@ -973,8 +973,11 @@ class VideoDetailController extends GetxController
     seek ??= getFirstSegment();
     // HDR 片源需要拷贝解码，mpv 拿不到画面时色调映射/峰值亮度都不会生效。
     // 同时它决定出画方式：HDR / 杜比视界走 SurfaceView 直通，SDR 走纹理。
-    plPlayerController.isHdrSource =
-        !isFileSource && firstVideo.quality.isHdr;
+    plPlayerController
+      ..isHdrSource = !isFileSource && firstVideo.quality.isHdr
+      ..isDolbyVisionSource =
+          !isFileSource &&
+          firstVideo.quality.code == VideoQuality.dolbyVision.code;
     await plPlayerController.setDataSource(
       isFileSource
           ? FileSource(
