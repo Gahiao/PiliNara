@@ -74,4 +74,8 @@ abstract final class NativeVideoSurfaceChannel {
   /// 与 Flutter 是否遮盖无关。
   static Future<Map?> probe({required int owner}) =>
       channel.invokeMethod<Map>('probe', {'owner': owner});
+
+  /// 诊断：Flutter 层背景模式、SurfaceView format 与视图树。
+  static Future<String?> surfaceInfo() =>
+      channel.invokeMethod<String>('surfaceInfo');
 }

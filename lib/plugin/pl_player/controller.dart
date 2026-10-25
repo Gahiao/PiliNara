@@ -1060,6 +1060,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       ? '播放器尚未初始化。\n请先播放一个视频（播放中无法打开设置页），\n播放几秒后再回到这里查看上次播放的快照。'
       : '（上次播放的快照）\n$_lastHdrSnapshot';
 
+  String _nativeRectLabel(ui.Rect? rect) {
+    if (rect == null) return '-';
+    return '${rect.left.toStringAsFixed(0)},${rect.top.toStringAsFixed(0)} '
+        '${rect.width.toStringAsFixed(0)}x${rect.height.toStringAsFixed(0)}';
+  }
+
   String get hdrDebugInfo {
     final player = _videoPlayerController;
     if (player == null) return lastHdrInfo;
@@ -1082,7 +1088,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (_lastProbeMean != null)
         '直通画面采样: mean=$_lastProbeMean / max=$_lastProbeMax / '
             'bright=$_lastProbeBright（mean≈0 表示 Surface 全黑）',
-      if (native) '直通画面矩形: ${nativeContentRect.value ?? '-'}',
+      if (native) '直通画面矩形: ${_nativeRectLabel(nativeContentRect.value)}',
       'vo: ${read('vo')}',
       'vo-configured: ${read('vo-configured')}',
       'hwdec-current: ${read('hwdec-current')}',

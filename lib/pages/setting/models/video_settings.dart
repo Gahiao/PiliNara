@@ -13,6 +13,7 @@ import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/audio_output_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/hdr_config.dart';
 import 'package:PiliPlus/plugin/pl_player/models/hwdec_type.dart';
+import 'package:PiliPlus/plugin/pl_player/utils/native_video_surface_channel.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/utils/filtering_text.dart';
 import 'package:PiliPlus/utils/storage.dart';
@@ -802,13 +803,17 @@ Future<void> _showHdrDebugDialog(
   final info =
       PlPlayerController.instance?.hdrDebugInfo ??
       PlPlayerController.lastHdrInfo;
+  final surfaceInfo = await NativeVideoSurfaceChannel.surfaceInfo();
+  final detail = surfaceInfo == null
+      ? info
+      : '$info\n\n--- 原生层 ---\n$surfaceInfo';
   await showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('HDR 状态诊断'),
       content: SingleChildScrollView(
         child: SelectableText(
-          info,
+          detail,
           style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
         ),
       ),

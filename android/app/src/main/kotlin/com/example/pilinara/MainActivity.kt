@@ -2,9 +2,14 @@ package com.example.pilinara
 
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.PixelFormat
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import android.view.SurfaceView
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager.LayoutParams
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs
@@ -25,6 +30,59 @@ class MainActivity : AudioServiceActivity() {
      */
     override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode =
         FlutterActivityLaunchConfigs.BackgroundMode.transparent
+
+    /**
+     * 兜底：个别 ROM/嵌入方式下 [getBackgroundMode] 可能没有把 FlutterSurfaceView
+     * 的 format 设为 TRANSLUCENT，Flutter 层就会变成不透明，把下面的 HDR
+     * SurfaceView 完全盖住（采样有画面但屏幕全黑）。这里在窗口创建后再强制一次。
+     */
+    private fun ensureFlutterSurfaceTransparent() {
+        val decor = window.decorView as? ViewGroup ?: return
+        fun walk(view: View) {
+            if (view is SurfaceView && view.javaClass.name.contains("Flutter")) {
+                if (view.holder.format != PixelFormat.TRANSLUCENT) {
+                    runCatching {
+                        view.holder.setFormat(PixelFormat.TRANSLUCENT)
+                        view.setZOrderOnTop(true)
+                    }.onFailure {
+                        Log.w("MainActivity", "force Flutter surface translucent failed", it)
+                    }
+                }
+            }
+            if (view is ViewGroup) {
+                for (i in 0 until view.childCount) {
+                    walk(view.getChildAt(i))
+                }
+            }
+        }
+        walk(decor)
+    }
+
+    /** 诊断：Flutter 层是否透明、背景模式与视图树。 */
+    private fun describeSurface(): String {
+        val builder = StringBuilder()
+        builder.append("backgroundMode=").append(getBackgroundMode().name)
+        val decor = window.decorView as? ViewGroup ?: return builder.toString()
+        fun walk(view: View, depth: Int) {
+            builder.append('\n').append("  ".repeat(depth)).append(view.javaClass.name)
+            if (view is SurfaceView) {
+                builder
+                    .append(" format=")
+                    .append(view.holder.format)
+                    .append(" size=")
+                    .append(view.width)
+                    .append('x')
+                    .append(view.height)
+            }
+            if (view is ViewGroup) {
+                for (i in 0 until view.childCount) {
+                    walk(view.getChildAt(i), depth + 1)
+                }
+            }
+        }
+        walk(decor, 0)
+        return builder.toString()
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -92,6 +150,7 @@ class MainActivity : AudioServiceActivity() {
                     owner = intArg("owner"),
                     result = result,
                 )
+                "surfaceInfo" -> result.success(describeSurface())
                 else -> result.notImplemented()
             }
         }
@@ -119,6 +178,12 @@ class MainActivity : AudioServiceActivity() {
             window.attributes.layoutInDisplayCutoutMode =
                 LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
+        window.decorView.post { ensureFlutterSurfaceTransparent() }
+    }
+
+    override fun onPostResume() {
+        super.onPostResume()
+        ensureFlutterSurfaceTransparent()
     }
 
     override fun onUserLeaveHint() {
