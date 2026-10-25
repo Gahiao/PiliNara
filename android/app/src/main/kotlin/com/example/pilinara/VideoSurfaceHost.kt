@@ -219,6 +219,10 @@ class VideoSurfaceHost(
             result.success(null)
             return
         }
+        val shown = sv.isShown
+        val visibility = sv.visibility
+        val alpha = sv.alpha.toDouble()
+        val parent = sv.parent?.javaClass?.name ?: "-"
         val bitmap = try {
             Bitmap.createBitmap(sv.width, sv.height, Bitmap.Config.ARGB_8888)
         } catch (t: Throwable) {
@@ -263,6 +267,10 @@ class VideoSurfaceHost(
                             "mean" to mean,
                             "max" to maxValue,
                             "bright" to bright,
+                            "shown" to shown,
+                            "vis" to visibility,
+                            "alpha" to alpha,
+                            "parent" to parent,
                         )
                     }.getOrNull()
                     bitmap.recycle()

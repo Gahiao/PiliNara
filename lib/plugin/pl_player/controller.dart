@@ -1088,6 +1088,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (_lastProbeMean != null)
         '直通画面采样: mean=$_lastProbeMean / max=$_lastProbeMax / '
             'bright=$_lastProbeBright（mean≈0 表示 Surface 全黑）',
+      if (_lastProbeShown != null)
+        '直通 SurfaceView: shown=$_lastProbeShown / vis=$_lastProbeVisibility / '
+            'alpha=$_lastProbeAlpha / parent=$_lastProbeParent',
       if (native) '直通画面矩形: ${_nativeRectLabel(nativeContentRect.value)}',
       'vo: ${read('vo')}',
       'vo-configured: ${read('vo-configured')}',
@@ -1161,6 +1164,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   int? _lastProbeMean;
   int? _lastProbeMax;
   int? _lastProbeBright;
+  bool? _lastProbeShown;
+  int? _lastProbeVisibility;
+  double? _lastProbeAlpha;
+  String? _lastProbeParent;
 
   /// 原生视频当前在屏幕上的矩形（逻辑像素，全局坐标）。
   ///
@@ -1230,10 +1237,21 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     final mean = (data?['mean'] as num?)?.toInt();
     final max = (data?['max'] as num?)?.toInt();
     final bright = (data?['bright'] as num?)?.toInt();
-    debugPrint('[HDR] probe mean=$mean max=$max bright=$bright');
+    final shown = data?['shown'] as bool?;
+    final visibility = (data?['vis'] as num?)?.toInt();
+    final alpha = (data?['alpha'] as num?)?.toDouble();
+    final parent = data?['parent'] as String?;
+    debugPrint(
+      '[HDR] probe mean=$mean max=$max bright=$bright '
+      'shown=$shown vis=$visibility alpha=$alpha parent=$parent',
+    );
     _lastProbeMean = mean;
     _lastProbeMax = max;
     _lastProbeBright = bright;
+    _lastProbeShown = shown;
+    _lastProbeVisibility = visibility;
+    _lastProbeAlpha = alpha;
+    _lastProbeParent = parent;
     if (mean == null || mean > 2) return;
     if (!nativeSurfaceMode.value || _instance == null) return;
     // 连续两次平均亮度都接近全黑才判定解码器没有出画，避免黑场误判。
