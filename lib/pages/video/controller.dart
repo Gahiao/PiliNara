@@ -404,11 +404,26 @@ class VideoDetailController extends GetxController
   void initFileSource(BiliDownloadEntryInfo entry) {
     this.entry = entry;
     _initLocalSkipIfNeeded();
+    final localQa = VideoQuality.fromCode(
+      entry.videoQuality ?? entry.preferedVideoQuality,
+    );
+    // 下载记录里没有保存 codecs，离线播放时按清晰度补一个 codec 标记，
+    // 否则 isHdrSource/isDolbyVisionSource 为 false，HDR 直通不会启用。
+    final localCodecs = switch (localQa) {
+      VideoQuality.dolbyVision => 'dvh1.05',
+      VideoQuality.hdr => 'hvc1.2',
+      VideoQuality.hdrVivid => 'hvc1.2',
+      _ => null,
+    };
     firstVideo = VideoItem(
       id: entry.preferedVideoQuality,
-      quality: VideoQuality.fromCode(entry.preferedVideoQuality),
+      quality: localQa,
       width: entry.ep?.width ?? entry.pageData?.width ?? 1,
       height: entry.ep?.height ?? entry.pageData?.height ?? 1,
+      codecs: localCodecs,
+    );
+    SmartDialog.showToast(
+      'DBG local init qa=${entry.videoQuality} pref=${entry.preferedVideoQuality} desc=${entry.qualityPithyDescription} codecs=$localCodecs',
     );
     if (watchProgress.get(cid.value.toString()) case final int progress?) {
       if (progress >= entry.totalTimeMilli - 400) {
