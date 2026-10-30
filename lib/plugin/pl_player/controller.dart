@@ -2958,17 +2958,22 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
     SmartDialog.showToast('DBG hb send progress=$progress type=$type');
 
-    Future<void> send() {
-      return VideoHttp.heartBeat(
-        aid: aid ?? _aid,
-        bvid: bvid ?? _bvid,
-        cid: cid ?? this.cid,
-        progress: progress,
-        epid: epid ?? _epid,
-        seasonId: seasonId ?? _seasonId,
-        subType: pgcType ?? _pgcType,
-        videoType: videoType ?? _videoType,
-      );
+    Future<void> send() async {
+      try {
+        await VideoHttp.heartBeat(
+          aid: aid ?? _aid,
+          bvid: bvid ?? _bvid,
+          cid: cid ?? this.cid,
+          progress: progress,
+          epid: epid ?? _epid,
+          seasonId: seasonId ?? _seasonId,
+          subType: pgcType ?? _pgcType,
+          videoType: videoType ?? _videoType,
+        );
+        SmartDialog.showToast('DBG hb ok progress=$progress type=$type');
+      } catch (e) {
+        SmartDialog.showToast('DBG hb fail progress=$progress err=$e');
+      }
     }
 
     switch (type) {
