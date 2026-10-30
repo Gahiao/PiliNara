@@ -2147,6 +2147,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
       /// position
       stream.position.listen((Duration position) {
+        // Media3 只留时间轴时 mpv 的 position 不可信，进度由 _syncDovi 更新。
+        if (_useMedia3Dovi) return;
         final posInSeconds = position.inSeconds;
 
         if (posInSeconds != this.position.value) {
@@ -2269,17 +2271,19 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   Future<void> seek(Duration position, {bool isSeek = false}) async {
-    if (isSeek) {
+    if (isSeek && !_useMedia3Dovi) {
       /// 拖动进度条调节时，不等待第一帧，防止抖动
       await _videoPlayerController?.stream.buffer.first;
     }
     danmakuController?.clear();
     try {
-      await _videoPlayerController?.seek(position);
       if (_useMedia3Dovi) {
+        this.position.value = position.inSeconds;
         unawaited(NativeVideoSurfaceChannel.doviSeek(
           positionMs: position.inMilliseconds + Pref.doviAudioOffset,
         ));
+      } else {
+        await _videoPlayerController?.seek(position);
       }
       _updateIOSPip(position);
     } catch (e) {
