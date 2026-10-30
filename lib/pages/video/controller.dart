@@ -1645,9 +1645,16 @@ class VideoDetailController extends GetxController
     if (lastPlayTime <= 0) {
       return Duration.zero;
     }
-    return _canUseLastPlayTime(lastPlayCid)
-        ? Duration(milliseconds: lastPlayTime)
-        : Duration.zero;
+    if (!_canUseLastPlayTime(lastPlayCid)) {
+      // 多 P 视频：B 站 last_play_cid 指向上次看的另一 P，直接丢弃会把
+      // 本 P 的本地进度也一起清掉；优先用本 P 的 watchProgress。
+      if (watchProgress.get(cid.value.toString()) case final int local?
+          when local > 0) {
+        return Duration(milliseconds: local);
+      }
+      return Duration.zero;
+    }
+    return Duration(milliseconds: lastPlayTime);
   }
 
   bool _canUseLastPlayTime(int? lastPlayCid) {
