@@ -1951,6 +1951,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // 若直接写回 position.value，进度条会被打回 0。
     seekToPos = seekTo;
     position.value = seekTo?.inSeconds ?? 0;
+    // 上个视频如果是在拖动进度条时被切走，isSeeking 会残留 true，
+    // progress 就会一直取 seekPosition（0），进度条看起来归零。
+    isSeeking.value = false;
+    seekPosition.value = 0;
+    SmartDialog.showToast(
+      'DBG open seek=${seekTo?.inSeconds} seeking=${isSeeking.value} seekPos=${seekPosition.value} pos=${position.value}',
+    );
     buffered.value = 0;
     danmakuController?.clear();
 
