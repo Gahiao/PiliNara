@@ -2002,6 +2002,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (_resolveHwdec() case final hwdec?) {
       player.setProperty('file-local-options/hwdec', hwdec);
     }
+    SmartDialog.showToast('DBG seek start=${seekTo?.inMilliseconds}');
     await player.open(
       Media(
         video,
