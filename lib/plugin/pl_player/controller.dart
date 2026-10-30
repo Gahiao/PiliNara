@@ -1242,6 +1242,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 原生 SurfaceView 就绪后，把 `wid` / SurfaceView 尺寸交给 mpv。
   void attachNativeSurface(int owner, int wid, int width, int height) {
     if (wid == 0 || _isStaleNativeOwner(owner)) return;
+    // 当前片源已经切到纹理出画时，忽略迟到的原生 Surface 挂载。
+    if (!nativeSurfaceMode.value) return;
     _nativeDetachTimer?.cancel();
     _nativeDetachTimer = null;
     _nativeOwner = owner;
@@ -1474,8 +1476,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   void _applyNativeSurface({Player? target}) {
-    // Media3 DoVi 路径不使用 mpv 视频输出/Surface，视频由原生 ExoPlayer 接管。
-    if (_useMedia3Dovi) return;
+    // 当前片源不是原生出画，或走 Media3 DoVi 时，都不能给 mpv 下发 vo/wid。
+    if (!nativeSurfaceMode.value || _useMedia3Dovi) return;
     final player = target ?? _videoPlayerController;
     final wid = _nativeWid;
     final size = _nativeSurfaceSize;
@@ -1876,7 +1878,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
     // 原生 SurfaceView 可能早于播放器就绪，这里补一次挂载。
     // media_kit 初始化会把 vo 复位成 null，所以必须强制重新下发。
-    if (_nativeWid != null) {
+    // 只有当前片源确实走原生出画时才挂载；切到 SDR/纹理时不能把旧 Surface
+    // 的 vo/wid 应用到新播放器，否则新播放器会输出到旧原生层，Flutter 纹理
+    // 停在最后一帧（切换视频时表现为画面定格）。
+    if (nativeSurfaceMode.value && _nativeWid != null) {
       if (_useMedia3Dovi) {
         _scheduleDoviPrepare();
       } else {
