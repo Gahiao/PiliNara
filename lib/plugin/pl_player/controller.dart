@@ -1947,6 +1947,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   ) async {
     isBuffering.value = false;
     _heartDuration = 0;
+    // 记录本次 open 的目标位置：mpv 在 seek 生效前会先报 position=0，
+    // 若直接写回 position.value，进度条会被打回 0。
+    seekToPos = seekTo;
     position.value = seekTo?.inSeconds ?? 0;
     buffered.value = 0;
     danmakuController?.clear();
@@ -2158,6 +2161,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         // Media3 只留时间轴时 mpv 的 position 不可信，进度由 _syncDovi 更新。
         if (_useMedia3Dovi) return;
         final posInSeconds = position.inSeconds;
+
+        // open(start: seekTo) 生效前 mpv 会先报 0，忽略它，避免进度条归零。
+        if (seekToPos != null) {
+          if (posInSeconds == 0) return;
+          seekToPos = null;
+        }
 
         if (posInSeconds != this.position.value) {
           if (posInSeconds == 0 && playerStatus.isPlaying) {
