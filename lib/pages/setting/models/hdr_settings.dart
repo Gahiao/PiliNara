@@ -117,16 +117,6 @@ List<SettingsModel> get hdrSettings => [
     defaultVal: false,
     onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
   ),
-  SwitchModel(
-    title: 'profile 5 gpu-next 解析（实验）',
-    subtitle:
-        '把 profile 5 杜比视界交给 mpv/libplacebo 解析，尝试修正偏色；'
-        '受 libmpv 构建限制，输出为 8bit/SDR，不会点亮 HDR。开启时 profile 5 不回退 HDR10',
-    leading: const Icon(Icons.science_outlined),
-    setKey: SettingBoxKey.doviProfile5GpuNext,
-    defaultVal: false,
-    onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
-  ),
   NormalModel(
     title: 'HDR 状态诊断',
     subtitle: '查看当前片源的 mpv 色彩、解码方式与色调映射参数，用于排查 HDR 不生效',

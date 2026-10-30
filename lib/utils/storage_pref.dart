@@ -1351,10 +1351,6 @@ abstract final class Pref {
   static bool get dolbyVisionFallback =>
       _setting.get(SettingBoxKey.dolbyVisionFallback, defaultValue: false);
 
-  /// profile 5 杜比视界改用 gpu-next/libplacebo 解析（实验，SDR 输出）。
-  static bool get doviProfile5GpuNext =>
-      _setting.get(SettingBoxKey.doviProfile5GpuNext, defaultValue: false);
-
   static Set<int> get danmakuBlockType => Set<int>.from(
     _setting.get(SettingBoxKey.danmakuBlockType, defaultValue: const <int>{}),
   );
