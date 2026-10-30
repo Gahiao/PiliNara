@@ -949,7 +949,9 @@ class VideoDetailController extends GetxController
     final currentVideoQa = this.currentVideoQa.value;
     if (currentVideoQa == null) return;
     _autoPlay.value = true;
-    playedTime = plPlayerController.videoPlayerController?.state.position;
+    playedTime = Duration(
+      milliseconds: plPlayerController.positionInMilliseconds,
+    );
     plPlayerController
       ..isBuffering.value = false
       ..buffered.value = 0;
