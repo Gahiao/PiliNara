@@ -1398,7 +1398,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (sec != position.value) {
         position.value = sec;
         // stream.position 在 Media3 路径被忽略，这里补上 B 站历史心跳。
-        makeHeartBeat(sec);
+        // isManual 跳过 dataStatus/暂停检查：Media3 首帧就绪时 mpv 侧可能
+        // 还没进入 playing，否则历史会被漏掉。
+        makeHeartBeat(sec, isManual: true);
       }
     }
     if (playing != _doviPlaying) {
