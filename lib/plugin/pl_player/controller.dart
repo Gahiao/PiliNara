@@ -2184,6 +2184,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         buffered.value = buffer.inSeconds;
       }),
       stream.buffering.listen((bool buffering) {
+        // Media3 出画时 mpv 只保留时间轴（vid/aid 都关掉），它的 buffering
+        // 状态不可信，会出现多余的加载图标；交给 Media3 自己管理。
+        if (_useMedia3Dovi) {
+          isBuffering.value = false;
+          return;
+        }
         isBuffering.value = buffering;
         if (!playerStatus.isCompleted) {
           _stopWakeLockTimer();
