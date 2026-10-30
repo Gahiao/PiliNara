@@ -113,6 +113,9 @@ class DoviPlayer(
     fun position(): Long = player?.currentPosition ?: 0L
 
     fun release() {
+        // 分集/换源时先解绑旧 Surface，否则新 ExoPlayer 可能继续往旧
+        // Surface 出画，Flutter 侧表现为画面定格不动。
+        runCatching { player?.clearVideoSurface() }
         runCatching { player?.release() }
         player = null
     }

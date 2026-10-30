@@ -1913,7 +1913,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   ///
   /// 因此只在 SDR ↔ HDR 切换时重建，普通换集、换 P 不受影响。
   Future<void> _switchOutputIfNeeded() async {
-    final wantNative = _wantNativeSurface;
+    final wantNative = _wantNativeSurface || _useMedia3Dovi;
     final player = _videoPlayerController;
     if (player == null) {
       nativeSurfaceMode.value = wantNative;
