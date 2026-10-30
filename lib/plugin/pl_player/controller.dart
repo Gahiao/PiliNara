@@ -1394,7 +1394,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // mpv 只保留时间轴，进度以 Media3 为准，否则保存/恢复会停在 0 或旧值。
     final media3Pos = await NativeVideoSurfaceChannel.doviPosition();
     if (media3Pos > 0) {
-      position.value = (media3Pos / 1000).round();
+      final sec = (media3Pos / 1000).round();
+      if (sec != position.value) {
+        position.value = sec;
+        // stream.position 在 Media3 路径被忽略，这里补上 B 站历史心跳。
+        makeHeartBeat(sec);
+      }
     }
     if (playing != _doviPlaying) {
       _doviPlaying = playing;
