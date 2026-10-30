@@ -1839,6 +1839,12 @@ class VideoDetailController extends GetxController
     cid.close();
     // 退出播放页时强制上报一次，在线视频也会走这里；mpv 已 paused 时
     // 普通心跳会被跳过，isManual 可以绕过。
+    // playedTime 可能还是打开时的旧值/0，先从播放器取当前进度。
+    if (plPlayerController.positionInMilliseconds > 0) {
+      playedTime = Duration(
+        milliseconds: plPlayerController.positionInMilliseconds,
+      );
+    }
     makeHeartBeat();
     if (isFileSource) {
       cacheLocalProgress();
