@@ -1242,8 +1242,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 原生 SurfaceView 就绪后，把 `wid` / SurfaceView 尺寸交给 mpv。
   void attachNativeSurface(int owner, int wid, int width, int height) {
     if (wid == 0 || _isStaleNativeOwner(owner)) return;
-    // 当前片源已经切到纹理出画时，忽略迟到的原生 Surface 挂载。
-    if (!nativeSurfaceMode.value) return;
     _nativeDetachTimer?.cancel();
     _nativeDetachTimer = null;
     _nativeOwner = owner;
@@ -1336,7 +1334,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _doviPrepared = false;
     _doviPlaying = false;
     _doviRate = 1;
-    if (_useMedia3Dovi) {
+    // 只允许当前活跃的控制器释放原生 DoVi 播放器；旧页面/旧控制器的
+    // dispose 不能把新页面刚准备好的 Media3 播放器释放掉（会直接黑屏）。
+    if (_useMedia3Dovi && identical(this, _instance)) {
       unawaited(NativeVideoSurfaceChannel.doviRelease());
     }
   }

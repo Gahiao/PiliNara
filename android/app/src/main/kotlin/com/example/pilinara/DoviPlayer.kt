@@ -81,17 +81,5 @@ class DoviPlayer(
     fun release() {
         runCatching { player?.release() }
         player = null
-        // ExoPlayer release 后 SurfaceView 会保留最后一帧；切视频时清成黑色，
-        // 避免新片源还没首帧时看起来像画面卡在最后一帧。
-        clearSurface()
-    }
-
-    private fun clearSurface() {
-        val surfaceView = surfaceProvider() ?: return
-        runCatching {
-            val canvas = surfaceView.holder.lockCanvas() ?: return
-            canvas.drawColor(android.graphics.Color.BLACK)
-            surfaceView.holder.unlockCanvasAndPost(canvas)
-        }
     }
 }
