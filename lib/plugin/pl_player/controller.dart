@@ -614,6 +614,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 当前 DoVi 视频流的 URL（视频轨，音频仍由 mpv 播放）。
   String? _doviVideoUrl;
   String? _doviAudioUrl;
+  // Media3 路径的起始位置：doviPrepare 不带 start，必须在准备完成后
+  // 补一次 doviSeek，否则每次打开都从 0 开始，进度条看起来归零。
+  int _doviStartMs = 0;
 
   Timer? _doviSyncTimer;
   Timer? _doviPrepareTimer;
@@ -1375,6 +1378,15 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       return;
     }
     _doviPrepared = true;
+    final startMs = _doviStartMs;
+    if (startMs > 0) {
+      position.value = startMs ~/ 1000;
+      unawaited(
+        NativeVideoSurfaceChannel.doviSeek(
+          positionMs: startMs + Pref.doviAudioOffset,
+        ),
+      );
+    }
     _startDoviSync();
   }
 
@@ -1627,6 +1639,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       _doviAudioUrl = _useMedia3Dovi && dataSource is NetworkSource
           ? dataSource.audioSource
           : null;
+      _doviStartMs = _useMedia3Dovi ? (seekTo?.inMilliseconds ?? 0) : 0;
       _doviDisposed = false;
       // 在创建播放器/首帧之前预切窗口 HDR 模式。
       _updateWindowHdrMode();
