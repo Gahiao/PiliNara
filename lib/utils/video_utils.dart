@@ -240,6 +240,8 @@ abstract final class VideoUtils {
     final codecs = dolbyVision.codecs ?? '';
     // 只处理 profile 5；profile 8/8.4 保留 DoVi。
     if (!codecs.contains('.05.')) return quality;
+    // 实验开关：把 profile 5 交给 gpu-next/libplacebo 解析，不回退 HDR10。
+    if (Pref.doviProfile5GpuNext) return quality;
     if (!Pref.dolbyVisionFallback) return quality;
     if (hdr == null) return quality;
     if ((hdr.height ?? 0) < (dolbyVision.height ?? 0)) return quality;

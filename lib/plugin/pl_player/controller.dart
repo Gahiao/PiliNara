@@ -606,6 +606,19 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 当前窗口是否已被预切到 HDR 色彩模式。
   bool _windowHdrRequested = false;
 
+  /// 当前片源是否为杜比视界 profile 5（dvh1.05/dvhe.05）。
+  bool get isDolbyVisionProfile5 =>
+      isDolbyVisionSource && (sourceCodecs?.contains('.05.') ?? false);
+
+  /// 当前实际使用的 HDR 后端。
+  ///
+  /// profile 5 打开实验开关时自动改用 gpu-next，让 libplacebo 解析 DoVi RPU；
+  /// 其余情况仍按用户设置。
+  HdrBackend get effectiveHdrBackend =>
+      isDolbyVisionProfile5 && Pref.doviProfile5GpuNext
+      ? HdrBackend.gpuNext
+      : HdrBackend.fromValue(Pref.hdrBackend);
+
   /// 是否应该走「视频在 Flutter 之下」的 SurfaceView 出画。
   ///
   /// 只有真正的 HDR 片源才需要它：Flutter 纹理固定 8bit，会丢掉 HDR 元数据；
@@ -618,7 +631,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       Pref.hdrSurface &&
       isHdrSource &&
       // mediacodec_embed 必须硬解；用户关掉硬解时退回纹理，避免黑屏。
-      (HdrBackend.fromValue(Pref.hdrBackend) != HdrBackend.mediacodecEmbed ||
+      (effectiveHdrBackend != HdrBackend.mediacodecEmbed ||
           Pref.enableHA);
 
   /// 原生 SurfaceView 出画开关。Rx 以便播放页在出画方式变化时立即重建视频控件。
@@ -638,7 +651,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// `mediacodec_embed` 是例外：它必须由 MediaCodec 直接解码到 Surface，
   /// 所以只要走这条 HDR 出画路径，就强制使用 `mediacodec`。
   String? _resolveHwdec() {
-    final backend = HdrBackend.fromValue(Pref.hdrBackend);
+    final backend = effectiveHdrBackend;
     if (_wantNativeSurface && backend == HdrBackend.mediacodecEmbed) {
       return 'mediacodec';
     }
@@ -1125,7 +1138,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       'dither: ${read('dither')}',
       'HDR 开关: ${Pref.enableHdr ? '开' : '关'}，'
           '直通出画: ${Pref.hdrSurface ? '开' : '关'}，'
-          '后端: ${Pref.hdrBackend}',
+          '后端: ${effectiveHdrBackend.value}',
       '片源判定: ${isHdrSource ? (isDolbyVisionSource ? 'HDR / 杜比视界' : (isHdrVividSource ? 'HDR Vivid' : 'HDR')) : 'SDR'}',
       if (sourceCodecs != null) '片源 codecs: $sourceCodecs',
     ].join('\n');
@@ -1365,7 +1378,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     final size = _nativeSurfaceSize;
     if (player == null || wid == null || size == null) return;
     if (size.$1 <= 1 || size.$2 <= 1) return;
-    final vo = Pref.hdrBackend;
+    final vo = effectiveHdrBackend.value;
     final needVo = _appliedWid != wid || _appliedVo != vo;
     try {
       if (_appliedSurfaceSize != size) {
@@ -1701,7 +1714,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     debugPrint(
       '[HDR] init: enable=${Pref.enableHdr} direct=${Pref.hdrSurface} '
       'hdrSource=$isHdrSource surface=${nativeSurfaceMode.value} '
-      'vo=${nativeSurfaceMode.value ? Pref.hdrBackend : '-'} hwdec=${_resolveHwdec()}',
+      'vo=${nativeSurfaceMode.value ? effectiveHdrBackend.value : '-'} hwdec=${_resolveHwdec()}',
     );
 
     final hwdec = _resolveHwdec();
@@ -1733,7 +1746,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         // HDR 片源的渲染后端可在设置里切换（mediacodec_embed / gpu-next / gpu），
         // 不同设备驱动对 10bit EGL 的支持差异很大。
         vo: nativeSurfaceMode.value
-            ? HdrBackend.fromValue(Pref.hdrBackend).value
+            ? effectiveHdrBackend.value
             : null,
       ),
     );
