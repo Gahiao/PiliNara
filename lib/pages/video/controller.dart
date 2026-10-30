@@ -420,7 +420,7 @@ class VideoDetailController extends GetxController
       defaultST = Duration.zero;
     }
     SmartDialog.showToast(
-      'DBG local read cid=${cid.value} saved=$progress defaultST=${defaultST?.inMilliseconds}',
+      'DBG local read cid=${cid.value} saved=${watchProgress.get(cid.value.toString())} defaultST=${defaultST?.inMilliseconds}',
     );
     data = PlayUrlModel(timeLength: entry.totalTimeMilli);
     _setVideoHeight();
