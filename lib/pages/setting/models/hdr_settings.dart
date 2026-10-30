@@ -128,6 +128,13 @@ List<SettingsModel> get hdrSettings => [
     onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
   ),
   NormalModel(
+    title: 'Media3 音画偏移',
+    leading: const Icon(Icons.sync_alt),
+    getSubtitle: () =>
+        '当前：${Pref.doviAudioOffset} ms（仅 profile 5 Media3 路径；正值让视频目标位置更靠后）',
+    onTap: _showDoviAudioOffsetDialog,
+  ),
+  NormalModel(
     title: 'HDR 状态诊断',
     subtitle: '查看当前片源的 mpv 色彩、解码方式与色调映射参数，用于排查 HDR 不生效',
     leading: const Icon(Icons.bug_report),
@@ -268,6 +275,52 @@ Future<void> _showHdrHwdecDialog(
   if (res != null) {
     await GStorage.setting.put(SettingBoxKey.hdrHwdecMode, res);
     SmartDialog.showToast('切换画质或重新打开视频后生效');
+    setState();
+  }
+}
+
+Future<void> _showDoviAudioOffsetDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  var value = Pref.doviAudioOffset.clamp(-500, 500).toDouble();
+  final result = await showDialog<int>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Media3 音画偏移'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${value.round()} ms'),
+            Slider(
+              value: value,
+              min: -500,
+              max: 500,
+              divisions: 100,
+              label: '${value.round()} ms',
+              onChanged: (v) => setDialogState(() => value = v),
+            ),
+            Text(
+              '正值让视频目标位置更靠后；调大/调小直到口型与声音对齐。仅影响 profile 5 Media3 路径。',
+              style: TextTheme.of(context).labelSmall?.copyWith(
+                color: ColorScheme.of(context).outline,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: Get.back, child: const Text('取消')),
+          TextButton(
+            onPressed: () => Get.back(result: value.round()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (result != null) {
+    await GStorage.setting.put(SettingBoxKey.doviAudioOffset, result);
     setState();
   }
 }

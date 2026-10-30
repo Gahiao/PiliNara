@@ -1373,9 +1373,15 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   void _startDoviSync() {
     _doviSyncTimer?.cancel();
-    _doviSyncTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+    _doviSyncTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
       unawaited(_syncDovi());
     });
+  }
+
+  void _applyDoviRate(double rate) {
+    if ((rate - _doviRate).abs() < 0.001) return;
+    _doviRate = rate;
+    unawaited(NativeVideoSurfaceChannel.doviSetRate(rate: rate));
   }
 
   Future<void> _syncDovi() async {
@@ -1384,7 +1390,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (player == null) return;
     final playing = player.state.playing;
     final pos = player.state.position.inMilliseconds;
-    final rate = player.state.rate;
+    final baseRate = player.state.rate;
     if (playing != _doviPlaying) {
       _doviPlaying = playing;
       if (playing) {
@@ -1393,13 +1399,22 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         unawaited(NativeVideoSurfaceChannel.doviPause());
       }
     }
-    if (rate != _doviRate) {
-      _doviRate = rate;
-      unawaited(NativeVideoSurfaceChannel.doviSetRate(rate: rate));
-    }
+    final target = pos + Pref.doviAudioOffset;
     final videoPos = await NativeVideoSurfaceChannel.doviPosition();
-    if ((videoPos - pos).abs() > 250) {
-      unawaited(NativeVideoSurfaceChannel.doviSeek(positionMs: pos));
+    final drift = videoPos - target;
+    if (drift.abs() > 300) {
+      // 大偏差直接 seek 拉齐，小偏差用视频播放速度慢慢追。
+      unawaited(NativeVideoSurfaceChannel.doviSeek(positionMs: target));
+      _applyDoviRate(baseRate);
+    } else if (playing) {
+      final correction = drift > 40
+          ? 0.98
+          : drift < -40
+          ? 1.02
+          : 1.0;
+      _applyDoviRate(baseRate * correction);
+    } else {
+      _applyDoviRate(baseRate);
     }
   }
 

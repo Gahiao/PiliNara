@@ -1355,6 +1355,10 @@ abstract final class Pref {
   static bool get media3Dovi =>
       _setting.get(SettingBoxKey.media3Dovi, defaultValue: false);
 
+  /// Media3 DoVi 路径的音画偏移（毫秒），正值让视频目标位置更靠后。
+  static int get doviAudioOffset =>
+      _setting.get(SettingBoxKey.doviAudioOffset, defaultValue: 0);
+
   static Set<int> get danmakuBlockType => Set<int>.from(
     _setting.get(SettingBoxKey.danmakuBlockType, defaultValue: const <int>{}),
   );
