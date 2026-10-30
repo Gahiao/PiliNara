@@ -170,10 +170,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   bool get enablePortraitSlideVideo =>
       Pref.portraitSlideVideo &&
-          onPortraitSlideUp != null &&
-          onPortraitSlideEnabled?.call() == true &&
-          isFullScreen.value &&
-          !isLive;
+      onPortraitSlideUp != null &&
+      onPortraitSlideEnabled?.call() == true &&
+      isFullScreen.value &&
+      !isLive;
 
   bool _isVertical = false;
 
@@ -214,9 +214,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     required String bvid,
     required int cid,
   }) =>
-      dataStatus.value == DataStatus.loaded &&
-      _bvid == bvid &&
-      this.cid == cid;
+      dataStatus.value == DataStatus.loaded && _bvid == bvid && this.cid == cid;
 
   /// 视频播放速度
   double get playbackSpeed => _playbackSpeed.value;
@@ -583,8 +581,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       (tempPlayerConf ? 0 : Pref.videoSaturation).obs;
   late final RxInt videoGamma = (tempPlayerConf ? 0 : Pref.videoGamma).obs;
   late final RxInt videoHue = (tempPlayerConf ? 0 : Pref.videoHue).obs;
-  late final RxInt audioDelayMs =
-      (tempPlayerConf ? 0 : Pref.audioDelayMs).obs;
+  late final RxInt audioDelayMs = (tempPlayerConf ? 0 : Pref.audioDelayMs).obs;
   Timer? _videoPictureSaveTimer;
 
   late int? cacheVideoQa = PlatformUtils.isMobile ? null : Pref.defaultVideoQa;
@@ -986,11 +983,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     resetAllVideoPictureParameters(persist: false);
   }
 
-  int _normalizeVideoPictureParameter(num value) =>
-      value.round().clamp(
+  int _normalizeVideoPictureParameter(num value) => value
+      .round()
+      .clamp(
         videoPictureParameterMin,
         videoPictureParameterMax,
-      ).toInt();
+      )
+      .toInt();
 
   RxInt? _videoPictureParameterState(String property) => switch (property) {
     'brightness' => videoBrightness,
@@ -1495,11 +1494,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         _appliedVo = vo;
         _applyHdrProperties(player, hdrSurface: true);
       }
-      debugPrint([
-        '[HDR] nativeSurface vo=$vo',
-        'wid=$wid',
-        'surface=${size.$1}x${size.$2}',
-      ].join(' '));
+      debugPrint(
+        [
+          '[HDR] nativeSurface vo=$vo',
+          'wid=$wid',
+          'surface=${size.$1}x${size.$2}',
+        ].join(' '),
+      );
     } catch (_) {}
   }
 
@@ -1955,9 +1956,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // progress 就会一直取 seekPosition（0），进度条看起来归零。
     isSeeking.value = false;
     seekPosition.value = 0;
-    SmartDialog.showToast(
-      'DBG open seek=${seekTo?.inSeconds} seeking=${isSeeking.value} seekPos=${seekPosition.value} pos=${position.value}',
-    );
     buffered.value = 0;
     danmakuController?.clear();
 
@@ -2012,7 +2010,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (_resolveHwdec() case final hwdec?) {
       player.setProperty('file-local-options/hwdec', hwdec);
     }
-    SmartDialog.showToast('DBG seek start=${seekTo?.inMilliseconds}');
     await player.open(
       Media(
         video,
@@ -2303,9 +2300,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     try {
       if (_useMedia3Dovi) {
         this.position.value = position.inSeconds;
-        unawaited(NativeVideoSurfaceChannel.doviSeek(
-          positionMs: position.inMilliseconds + Pref.doviAudioOffset,
-        ));
+        unawaited(
+          NativeVideoSurfaceChannel.doviSeek(
+            positionMs: position.inMilliseconds + Pref.doviAudioOffset,
+          ),
+        );
       } else {
         await _videoPlayerController?.seek(position);
       }
@@ -2489,7 +2488,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
             // 应用内音量模式：使用 media_kit 控制应用内音量
             _videoPlayerController?.setVolume(volume * 100);
             if (_useMedia3Dovi) {
-              unawaited(NativeVideoSurfaceChannel.doviSetVolume(volume: volume));
+              unawaited(
+                NativeVideoSurfaceChannel.doviSetVolume(volume: volume),
+              );
             }
           } else {
             // 默认模式：控制系统音量
@@ -2968,12 +2969,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         !enableHeart ||
         progress == 0 ||
         (playerStatus.isPaused && !isManual)) {
-      SmartDialog.showToast(
-        'DBG hb skip progress=$progress enable=$enableHeart paused=${playerStatus.isPaused} data=${dataStatus.value}',
-      );
       return null;
     }
-    SmartDialog.showToast('DBG hb send progress=$progress type=$type');
 
     Future<void> send() async {
       try {
@@ -2987,10 +2984,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           subType: pgcType ?? _pgcType,
           videoType: videoType ?? _videoType,
         );
-        SmartDialog.showToast('DBG hb ok progress=$progress type=$type');
-      } catch (e) {
-        SmartDialog.showToast('DBG hb fail progress=$progress err=$e');
-      }
+      } catch (e) {}
     }
 
     switch (type) {
@@ -3283,8 +3277,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   void _interruptAutoAudioRestore() {
-    if (!_autoAudioRestoreInProgress &&
-        _autoAudioRestoreCompleter == null) {
+    if (!_autoAudioRestoreInProgress && _autoAudioRestoreCompleter == null) {
       return;
     }
     _autoAudioRestoreGeneration++;

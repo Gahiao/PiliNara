@@ -376,9 +376,6 @@ class VideoDetailController extends GetxController
       unawaited(libraryService.clearLastLocalPlayedIfCid(cid.value));
     } else if (playedTime case final playedTime?) {
       final progressMs = playedTime.inMilliseconds;
-      SmartDialog.showToast(
-        'DBG local save cid=${cid.value} progress=$progressMs',
-      );
       // 退出时 mpv 可能已经是 paused，普通心跳会被跳过；这里强制上报一次，
       // 否则 B 站历史会停在最后一次 playing 时的进度。
       unawaited(
@@ -427,9 +424,6 @@ class VideoDetailController extends GetxController
       height: entry.ep?.height ?? entry.pageData?.height ?? 1,
       codecs: localCodecs,
     );
-    SmartDialog.showToast(
-      'DBG local init qa=${entry.videoQuality} pref=${entry.preferedVideoQuality} desc=${entry.qualityPithyDescription} codecs=$localCodecs',
-    );
     if (watchProgress.get(cid.value.toString()) case final int progress?) {
       if (progress >= entry.totalTimeMilli - 400) {
         defaultST = Duration.zero;
@@ -439,9 +433,6 @@ class VideoDetailController extends GetxController
     } else {
       defaultST = Duration.zero;
     }
-    SmartDialog.showToast(
-      'DBG local read cid=${cid.value} saved=${watchProgress.get(cid.value.toString())} defaultST=${defaultST?.inMilliseconds}',
-    );
     data = PlayUrlModel(timeLength: entry.totalTimeMilli);
     _setVideoHeight();
   }
@@ -466,8 +457,7 @@ class VideoDetailController extends GetxController
       final fsQa = isWiFi ? Pref.defaultVideoQa : Pref.defaultVideoQaCellular;
       final curHighestVideoQa = data.dash!.video!.first.quality.code;
       int targetQa = curHighestVideoQa;
-      if (data.acceptQuality?.isNotEmpty == true &&
-          fsQa <= curHighestVideoQa) {
+      if (data.acceptQuality?.isNotEmpty == true && fsQa <= curHighestVideoQa) {
         targetQa = data.acceptQuality!.findClosestTarget(
           (e) => e <= fsQa,
           (a, b) => a > b ? a : b,
@@ -1034,8 +1024,7 @@ class VideoDetailController extends GetxController
           !isFileSource &&
           firstVideo.quality.code == VideoQuality.dolbyVision.code
       ..isHdrVividSource =
-          !isFileSource &&
-          firstVideo.quality.code == VideoQuality.hdrVivid.code
+          !isFileSource && firstVideo.quality.code == VideoQuality.hdrVivid.code
       ..sourceCodecs = firstVideo.codecs;
     await plPlayerController.setDataSource(
       isFileSource
@@ -1077,7 +1066,9 @@ class VideoDetailController extends GetxController
     // 触发不必要的异步操作和 UI 更新
     if (isClosed) {
       if (kDebugMode) {
-        debugPrint('[VideoDetail] playerInit: controller is closed, skipping resource loading');
+        debugPrint(
+          '[VideoDetail] playerInit: controller is closed, skipping resource loading',
+        );
       }
       return;
     }
@@ -1169,17 +1160,17 @@ class VideoDetailController extends GetxController
     }
     isQuerying = true;
     try {
-    if (_lastQueryBvid != bvid || _lastQueryCid != cid.value) {
-      // 跨视频/分P时重置画质缓存，确保根据半屏/全屏设置重新选择默认画质。
-      // resetTempSettings 在 setDataSource 中执行（HTTP 请求之后），
-      // 此处提前重置使得 cacheVideoQa == null 分支能正确初始化。
-      if (PlatformUtils.isMobile) {
-        plPlayerController.cacheVideoQa = null;
+      if (_lastQueryBvid != bvid || _lastQueryCid != cid.value) {
+        // 跨视频/分P时重置画质缓存，确保根据半屏/全屏设置重新选择默认画质。
+        // resetTempSettings 在 setDataSource 中执行（HTTP 请求之后），
+        // 此处提前重置使得 cacheVideoQa == null 分支能正确初始化。
+        if (PlatformUtils.isMobile) {
+          plPlayerController.cacheVideoQa = null;
+        }
+        _lastQueryBvid = bvid;
+        _lastQueryCid = cid.value;
       }
-      _lastQueryBvid = bvid;
-      _lastQueryCid = cid.value;
-    }
-    await _queryVideoUrl(fromReset, autoFullScreenFlag, reinitializePlayer);
+      await _queryVideoUrl(fromReset, autoFullScreenFlag, reinitializePlayer);
     } finally {
       isQuerying = false;
     }
@@ -1194,9 +1185,7 @@ class VideoDetailController extends GetxController
     bool? netIsWiFi;
     if (!_autoPlayNetworkChecked) {
       _autoPlayNetworkChecked = true;
-      if (PlatformUtils.isMobile &&
-          _autoPlay.value &&
-          Pref.autoPlayWifiOnly) {
+      if (PlatformUtils.isMobile && _autoPlay.value && Pref.autoPlayWifiOnly) {
         netIsWiFi = await ConnectivityUtils.isWiFi;
         if (!netIsWiFi) {
           _autoPlay.value = false;
@@ -1212,8 +1201,8 @@ class VideoDetailController extends GetxController
       final halfScreenQa = Pref.defaultVideoQaHalfScreen;
       plPlayerController
         // 半屏与蜂窝是两个正交的画质上限，同时命中取较低者（docs/adr/0002）
-        ..cacheVideoQa = !plPlayerController.isFullScreen.value &&
-                halfScreenQa != null
+        ..cacheVideoQa =
+            !plPlayerController.isFullScreen.value && halfScreenQa != null
             ? min(halfScreenQa, fsQa)
             : fsQa
         ..cacheAudioQa = isWiFi
@@ -1246,9 +1235,6 @@ class VideoDetailController extends GetxController
         } else if (playUrlStartTime != null) {
           defaultST = playUrlStartTime;
         }
-        SmartDialog.showToast(
-          'DBG online read cid=${cid.value} defaultST=${defaultST?.inMilliseconds} last=${data.lastPlayTime} lastCid=${data.lastPlayCid}',
-        );
       }
 
       if (!isUgc && !fromReset && plPlayerController.enablePgcSkip) {
@@ -1945,18 +1931,19 @@ class VideoDetailController extends GetxController
     bool shouldCancel() => taskId != _dmFetchTaskId || isClosed;
     final durationMs =
         data.timeLength ?? plPlayerController.durationInMilliseconds;
-    final future = DanmakuDensityTrend.fetchAll(
-      cid: cid,
-      durationMs: durationMs,
-      shouldCancel: shouldCancel,
-    ).then((elems) {
-      // 失败不留缓存，同一分P内下次触发可重试；被更新的任务顶掉时不动缓存
-      if (elems == null && taskId == _dmFetchTaskId) {
-        _dmElemsCid = null;
-        _dmElemsFuture = null;
-      }
-      return elems;
-    });
+    final future =
+        DanmakuDensityTrend.fetchAll(
+          cid: cid,
+          durationMs: durationMs,
+          shouldCancel: shouldCancel,
+        ).then((elems) {
+          // 失败不留缓存，同一分P内下次触发可重试；被更新的任务顶掉时不动缓存
+          if (elems == null && taskId == _dmFetchTaskId) {
+            _dmElemsCid = null;
+            _dmElemsFuture = null;
+          }
+          return elems;
+        });
     _dmElemsCid = cid;
     _dmElemsFuture = future;
     return future;
