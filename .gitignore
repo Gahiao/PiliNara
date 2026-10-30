@@ -170,3 +170,7 @@ test*
 /pubspec_overrides.yaml
 .mindfs
 .agents 
+# 本地 libmpv 试验目录，不提交
+/third_party/libmpv-android-video-build/
+/third_party/media_kit_libs_android_video/
+/crash_custom.log
