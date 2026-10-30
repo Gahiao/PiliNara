@@ -1338,7 +1338,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _doviSyncTimer = null;
     _doviPrepared = false;
     _doviPlaying = false;
-    _doviRate = 1;
     // 只允许当前活跃的控制器释放原生 DoVi 播放器；旧页面/旧控制器的
     // dispose 不能把新页面刚准备好的 Media3 播放器释放掉（会直接黑屏）。
     if (_useMedia3Dovi && identical(this, _instance)) {
