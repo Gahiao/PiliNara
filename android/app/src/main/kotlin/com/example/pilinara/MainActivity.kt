@@ -199,6 +199,12 @@ class MainActivity : AudioServiceActivity() {
                     doviPlayer?.pause()
                     result.success(null)
                 }
+                "doviSetVolume" -> {
+                    (call.argument<Any>("volume") as? Number)?.toFloat()?.let {
+                        doviPlayer?.setVolume(it)
+                    }
+                    result.success(null)
+                }
                 "doviSeek" -> {
                     (call.argument<Any>("positionMs") as? Number)?.toLong()?.let {
                         doviPlayer?.seekTo(it)

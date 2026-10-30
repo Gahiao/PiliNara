@@ -108,6 +108,9 @@ abstract final class NativeVideoSurfaceChannel {
   static Future<void> doviSetRate({required double rate}) =>
       channel.invokeMethod<void>('doviSetRate', {'rate': rate});
 
+  static Future<void> doviSetVolume({required double volume}) =>
+      channel.invokeMethod<void>('doviSetVolume', {'volume': volume});
+
   static Future<int> doviPosition() async =>
       await channel.invokeMethod<int>('doviPosition') ?? 0;
 

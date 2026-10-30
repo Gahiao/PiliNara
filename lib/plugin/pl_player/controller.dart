@@ -620,7 +620,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   Timer? _doviPrepareTimer;
   bool _doviPrepared = false;
   bool _doviPlaying = false;
-  double _doviRate = 1;
   bool _doviDisposed = false;
 
   /// 是否应该走「视频在 Flutter 之下」的 SurfaceView 出画。
@@ -1379,15 +1378,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   void _startDoviSync() {
     _doviSyncTimer?.cancel();
-    _doviSyncTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+    _doviSyncTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       unawaited(_syncDovi());
     });
-  }
-
-  void _applyDoviRate(double rate) {
-    if ((rate - _doviRate).abs() < 0.001) return;
-    _doviRate = rate;
-    unawaited(NativeVideoSurfaceChannel.doviSetRate(rate: rate));
   }
 
   Future<void> _syncDovi() async {
@@ -1395,8 +1388,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     final player = _videoPlayerController;
     if (player == null) return;
     final playing = player.state.playing;
-    final pos = player.state.position.inMilliseconds;
-    final baseRate = player.state.rate;
     if (playing != _doviPlaying) {
       _doviPlaying = playing;
       if (playing) {
@@ -1405,23 +1396,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         unawaited(NativeVideoSurfaceChannel.doviPause());
       }
     }
-    final target = pos + Pref.doviAudioOffset;
-    final videoPos = await NativeVideoSurfaceChannel.doviPosition();
-    final drift = videoPos - target;
-    if (drift.abs() > 300) {
-      // 大偏差直接 seek 拉齐，小偏差用视频播放速度慢慢追。
-      unawaited(NativeVideoSurfaceChannel.doviSeek(positionMs: target));
-      _applyDoviRate(baseRate);
-    } else if (playing) {
-      final correction = drift > 40
-          ? 0.98
-          : drift < -40
-          ? 1.02
-          : 1.0;
-      _applyDoviRate(baseRate * correction);
-    } else {
-      _applyDoviRate(baseRate);
-    }
+    // Media3 自己播音频+视频，用 ExoPlayer 原生时钟；不再根据 mpv 位置
+    // seek/调速，否则会周期性卡顿、定格。
   }
 
   /// 更新 SurfaceView 的布局尺寸。
@@ -1850,6 +1826,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // 关闭 mpv 的视频轨，避免两个解码器抢同一个 Surface。
     if (_useMedia3Dovi) {
       player.setProperty('vid', 'no');
+      player.setProperty('aid', 'no');
     }
 
     // 渲染后端出错（例如 EGL 10bit 配置创建失败）会在这里出现，便于排查黑屏
@@ -2288,6 +2265,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     danmakuController?.clear();
     try {
       await _videoPlayerController?.seek(position);
+      if (_useMedia3Dovi) {
+        unawaited(NativeVideoSurfaceChannel.doviSeek(
+          positionMs: position.inMilliseconds + Pref.doviAudioOffset,
+        ));
+      }
       _updateIOSPip(position);
     } catch (e) {
       if (kDebugMode) debugPrint('seek failed: $e');
@@ -2323,6 +2305,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (speed == _videoPlayerController?.state.rate) return;
 
     await _videoPlayerController?.setRate(speed);
+    if (_useMedia3Dovi) {
+      unawaited(NativeVideoSurfaceChannel.doviSetRate(rate: speed));
+    }
     if (!isLive) _playbackSpeed.value = speed;
     _updatePlaybackState();
     if (danmakuController != null) {
@@ -2361,6 +2346,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 底层播放：申请音频焦点 + 启动播放，不含 UI 副作用
   Future<void> _rawPlay() async {
     await _videoPlayerController?.play();
+    if (_useMedia3Dovi) {
+      unawaited(NativeVideoSurfaceChannel.doviPlay());
+    }
     audioSessionHandler?.setActive(true);
     playerStatus = PlayerStatus.playing;
   }
@@ -2382,6 +2370,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 暂停播放
   Future<void> pause({bool notify = true, bool isInterrupt = false}) async {
     await _videoPlayerController?.pause();
+    if (_useMedia3Dovi) {
+      unawaited(NativeVideoSurfaceChannel.doviPause());
+    }
     playerStatus = .paused;
 
     // 主动暂停时让出音频焦点
@@ -2458,6 +2449,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           if (Pref.enableAppVolume) {
             // 应用内音量模式：使用 media_kit 控制应用内音量
             _videoPlayerController?.setVolume(volume * 100);
+            if (_useMedia3Dovi) {
+              unawaited(NativeVideoSurfaceChannel.doviSetVolume(volume: volume));
+            }
           } else {
             // 默认模式：控制系统音量
             FlutterVolumeController.updateShowSystemUI(false);

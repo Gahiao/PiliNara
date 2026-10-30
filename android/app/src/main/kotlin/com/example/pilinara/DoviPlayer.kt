@@ -51,7 +51,7 @@ class DoviPlayer(
                 .setEnableDecoderFallback(true)
             val exo = ExoPlayer.Builder(activity, renderers).build()
             exo.setVideoSurfaceView(surfaceView)
-            exo.volume = 0f
+            exo.volume = 1f
             exo.playWhenReady = true
             exo.addListener(object : Player.Listener {
                 override fun onPlayerError(error: PlaybackException) {
@@ -86,6 +86,10 @@ class DoviPlayer(
 
     fun setRate(rate: Float) {
         player?.setPlaybackSpeed(rate.coerceAtLeast(0.1f))
+    }
+
+    fun setVolume(volume: Float) {
+        player?.volume = volume.coerceIn(0f, 1f)
     }
 
     fun position(): Long = player?.currentPosition ?: 0L
