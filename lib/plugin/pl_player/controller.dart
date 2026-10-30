@@ -1310,10 +1310,15 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 在 setDataSource 开始、播放器与首帧出现之前切换，让面板的 HDR 模式
   /// 切换发生在加载/黑屏阶段，而不是首帧出声时整屏亮一下。
   void _updateWindowHdrMode() {
-    // 杜比视界/HDR Vivid 不预切窗口 HDR 模式：让系统按片源元数据切到正确的
-    // 显示模式，强行 COLOR_MODE_HDR 会变成 HDR10，导致颜色异常。
+    // 只有 mediacodec_embed 真正由系统/解码器直通 HDR；gpu/gpu-next 在本
+    // libmpv 构建上实际输出 SDR，不应把窗口预切成 HDR。
+    // 杜比视界/HDR Vivid 也不预切，让系统按片源元数据切到正确显示模式。
+    final backend = HdrBackend.fromValue(Pref.hdrBackend);
     final wanted =
-        _wantNativeSurface && !isDolbyVisionSource && !isHdrVividSource;
+        _wantNativeSurface &&
+        backend == HdrBackend.mediacodecEmbed &&
+        !isDolbyVisionSource &&
+        !isHdrVividSource;
     if (wanted == _windowHdrRequested) return;
     _windowHdrRequested = wanted;
     unawaited(NativeVideoSurfaceChannel.setWindowHdr(enabled: wanted));
@@ -1547,8 +1552,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         HdrConfig.fromPref().mpvProperties,
       );
       if (hdrSurface) {
-        // 走 SurfaceView 时请求 10bit / HDR 输出；渲染后端不支持时会被忽略。
-        properties['target-colorspace-hint'] = 'yes';
+        final backend = HdrBackend.fromValue(Pref.hdrBackend);
+        // 只有 mediacodec_embed 由系统/解码器直通 HDR；gpu/gpu-next 的
+        // libmpv 构建没有 Android HDR EGL/dataspace，请求 HDR 输出会黑屏或
+        // 颜色异常。对这两个后端关闭 target-colorspace-hint，让 mpv 正常
+        // 做 HDR→SDR 色调映射后输出到 Surface。
+        properties['target-colorspace-hint'] =
+            backend == HdrBackend.mediacodecEmbed ? 'yes' : 'no';
       }
       debugPrint('[HDR] properties: $properties');
       for (final entry in properties.entries) {
