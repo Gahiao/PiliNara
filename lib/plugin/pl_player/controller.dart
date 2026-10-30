@@ -2951,8 +2951,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         !enableHeart ||
         progress == 0 ||
         (playerStatus.isPaused && !isManual)) {
+      SmartDialog.showToast(
+        'DBG hb skip progress=$progress enable=$enableHeart paused=${playerStatus.isPaused} data=${dataStatus.value}',
+      );
       return null;
     }
+    SmartDialog.showToast('DBG hb send progress=$progress type=$type');
 
     Future<void> send() {
       return VideoHttp.heartBeat(
