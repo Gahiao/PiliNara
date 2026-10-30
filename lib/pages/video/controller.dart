@@ -379,6 +379,11 @@ class VideoDetailController extends GetxController
       SmartDialog.showToast(
         'DBG local save cid=${cid.value} progress=$progressMs',
       );
+      // 退出时 mpv 可能已经是 paused，普通心跳会被跳过；这里强制上报一次，
+      // 否则 B 站历史会停在最后一次 playing 时的进度。
+      unawaited(
+        plPlayerController.makeHeartBeat(progressMs ~/ 1000, isManual: true),
+      );
       unawaited(watchProgress.put(cid.value.toString(), progressMs));
       unawaited(
         libraryService.updateLastLocalPlayed(
