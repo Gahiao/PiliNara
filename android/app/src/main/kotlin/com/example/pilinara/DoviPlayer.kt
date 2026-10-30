@@ -50,7 +50,7 @@ class DoviPlayer(
             val exo = ExoPlayer.Builder(activity, renderers).build()
             exo.setVideoSurfaceView(surfaceView)
             exo.volume = 0f
-            exo.playWhenReady = false
+            exo.playWhenReady = true
             exo.setMediaSource(mediaSource)
             exo.prepare()
             player = exo
