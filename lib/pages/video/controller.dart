@@ -1837,6 +1837,9 @@ class VideoDetailController extends GetxController
     cancelBlockListener();
     _dmTrendTaskId++;
     cid.close();
+    // 退出播放页时强制上报一次，在线视频也会走这里；mpv 已 paused 时
+    // 普通心跳会被跳过，isManual 可以绕过。
+    makeHeartBeat();
     if (isFileSource) {
       cacheLocalProgress();
     }
@@ -1855,6 +1858,7 @@ class VideoDetailController extends GetxController
   }
 
   void onReset({bool isStein = false}) {
+    makeHeartBeat();
     if (isFileSource) {
       cacheLocalProgress();
     }
