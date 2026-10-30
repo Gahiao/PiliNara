@@ -106,8 +106,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   final RxInt seekPosition = RxInt(0);
   int get progress => isSeeking.value ? seekPosition.value : position.value;
 
-  int get positionInMilliseconds =>
-      videoPlayerController?.state.position.inMilliseconds ?? 0;
+  int get positionInMilliseconds => _useMedia3Dovi
+      ? position.value * 1000
+      : videoPlayerController?.state.position.inMilliseconds ?? 0;
 
   final RxInt buffered = RxInt(0);
 
@@ -1388,6 +1389,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     final player = _videoPlayerController;
     if (player == null) return;
     final playing = player.state.playing;
+    // mpv 只保留时间轴，进度以 Media3 为准，否则保存/恢复会停在 0 或旧值。
+    final media3Pos = await NativeVideoSurfaceChannel.doviPosition();
+    if (media3Pos > 0) {
+      position.value = (media3Pos / 1000).round();
+    }
     if (playing != _doviPlaying) {
       _doviPlaying = playing;
       if (playing) {

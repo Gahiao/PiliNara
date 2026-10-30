@@ -486,7 +486,9 @@ class VideoDetailController extends GetxController
     super.onInit();
     args = Get.arguments;
     plPlayerController.onNeedsPlayerInit = () async {
-      playedTime = plPlayerController.videoPlayerController?.state.position;
+      playedTime = Duration(
+        milliseconds: plPlayerController.positionInMilliseconds,
+      );
       await playerInit();
     };
 
