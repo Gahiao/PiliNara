@@ -158,8 +158,6 @@ vid=auto
    当成 SDR（诊断里表现为 `bt.709 / bt.1886`、`sig-peak=0`）导致偏色。开启「杜比视界
    兼容模式」后，如果存在同分辨率 HDR10（125）片源，会自动改用 HDR10。兼容模式
    只处理 profile 5；profile 8/8.4 带 HDR10/HLG 基础层，始终保留 DoVi 直通。
-   实验开关「profile 5 gpu-next 解析」会把 profile 5 交给 gpu-next/libplacebo
-   解析 RPU（不回退 125）；受 libmpv 构建限制输出为 8bit/SDR，不会点亮 HDR。
 3. **手势限制**：原生 SurfaceView 是独立图层，无法跟随 Flutter 的旋转与镜像。
    HDR 直通时禁用双指旋转、自动重置镜像；缩放/平移通过矩形同步仍然可用。
 4. **PiP**：支持，但小窗圆角无法裁切原生图层（会看到直角视频）；
