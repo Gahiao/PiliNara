@@ -22,6 +22,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : AudioServiceActivity() {
     private lateinit var methodChannel: MethodChannel
     private var videoSurfaceHost: VideoSurfaceHost? = null
+    private var doviPlayer: DoviPlayer? = null
 
     /**
      * 透明背景模式：让 Flutter 的 surface 支持逐像素透明且 Z 序置顶，
@@ -103,6 +104,8 @@ class MainActivity : AudioServiceActivity() {
 
         videoSurfaceHost?.release()
         videoSurfaceHost = null
+        doviPlayer?.release()
+        doviPlayer = null
 
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "PiliNara")
         methodChannel.setMethodCallHandler { call, result ->
@@ -118,6 +121,7 @@ class MainActivity : AudioServiceActivity() {
         )
         val host = VideoSurfaceHost(this, surfaceChannel)
         videoSurfaceHost = host
+        doviPlayer = DoviPlayer(this) { host.surfaceView() }
 
         surfaceChannel.setMethodCallHandler { call, result ->
             fun intArg(name: String): Int =
@@ -179,12 +183,47 @@ class MainActivity : AudioServiceActivity() {
                     result = result,
                 )
                 "surfaceInfo" -> result.success(describeSurface())
+                "doviPrepare" -> {
+                    val url = call.argument<String>("url").orEmpty()
+                    val referer = call.argument<String>("referer").orEmpty()
+                    val userAgent = call.argument<String>("userAgent").orEmpty()
+                    result.success(
+                        doviPlayer?.prepare(url, referer, userAgent) == true,
+                    )
+                }
+                "doviPlay" -> {
+                    doviPlayer?.play()
+                    result.success(null)
+                }
+                "doviPause" -> {
+                    doviPlayer?.pause()
+                    result.success(null)
+                }
+                "doviSeek" -> {
+                    (call.argument<Any>("positionMs") as? Number)?.toLong()?.let {
+                        doviPlayer?.seekTo(it)
+                    }
+                    result.success(null)
+                }
+                "doviSetRate" -> {
+                    (call.argument<Any>("rate") as? Number)?.toFloat()?.let {
+                        doviPlayer?.setRate(it)
+                    }
+                    result.success(null)
+                }
+                "doviPosition" -> result.success(doviPlayer?.position() ?: 0L)
+                "doviRelease" -> {
+                    doviPlayer?.release()
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
     }
 
     override fun onDestroy() {
+        doviPlayer?.release()
+        doviPlayer = null
         videoSurfaceHost?.release()
         videoSurfaceHost = null
         super.onDestroy()

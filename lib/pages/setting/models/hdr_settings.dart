@@ -117,6 +117,16 @@ List<SettingsModel> get hdrSettings => [
     defaultVal: true,
     onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
   ),
+  SwitchModel(
+    title: 'profile 5 Media3 解码（真 DoVi，实验）',
+    subtitle:
+        '用 ExoPlayer/MediaCodec 解码 profile 5，尝试真正输出杜比视界；'
+        '音频仍由 mpv 播放，视频位置会与 mpv 同步。可能有音画不同步，需重新打开视频生效',
+    leading: const Icon(Icons.movie_filter_outlined),
+    setKey: SettingBoxKey.media3Dovi,
+    defaultVal: false,
+    onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
+  ),
   NormalModel(
     title: 'HDR 状态诊断',
     subtitle: '查看当前片源的 mpv 色彩、解码方式与色调映射参数，用于排查 HDR 不生效',

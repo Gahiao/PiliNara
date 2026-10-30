@@ -82,4 +82,35 @@ abstract final class NativeVideoSurfaceChannel {
   /// 进入 HDR 播放前预切窗口色彩模式，使面板切换发生在加载/黑屏阶段。
   static Future<void> setWindowHdr({required bool enabled}) =>
       channel.invokeMethod<void>('setWindowHdr', {'enabled': enabled});
+
+  /// Media3 DoVi 视频：把视频流交给原生 ExoPlayer 解码到同一个 SurfaceView。
+  static Future<bool> doviPrepare({
+    required String url,
+    required String referer,
+    required String userAgent,
+  }) async =>
+      await channel.invokeMethod<bool>('doviPrepare', {
+        'url': url,
+        'referer': referer,
+        'userAgent': userAgent,
+      }) ??
+      false;
+
+  static Future<void> doviPlay() =>
+      channel.invokeMethod<void>('doviPlay');
+
+  static Future<void> doviPause() =>
+      channel.invokeMethod<void>('doviPause');
+
+  static Future<void> doviSeek({required int positionMs}) =>
+      channel.invokeMethod<void>('doviSeek', {'positionMs': positionMs});
+
+  static Future<void> doviSetRate({required double rate}) =>
+      channel.invokeMethod<void>('doviSetRate', {'rate': rate});
+
+  static Future<int> doviPosition() async =>
+      await channel.invokeMethod<int>('doviPosition') ?? 0;
+
+  static Future<void> doviRelease() =>
+      channel.invokeMethod<void>('doviRelease');
 }

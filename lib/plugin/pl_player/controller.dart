@@ -603,8 +603,25 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 当前选中视频流的 codecs 字符串（用于诊断 DoVi profile 5/8）。
   String? sourceCodecs;
 
+  /// 当前片源是否为杜比视界 profile 5（dvh1.05/dvhe.05）。
+  bool get isDolbyVisionProfile5 =>
+      isDolbyVisionSource && (sourceCodecs?.contains('.05.') ?? false);
+
   /// 当前窗口是否已被预切到 HDR 色彩模式。
   bool _windowHdrRequested = false;
+
+  /// 是否走 Media3/ExoPlayer 解码 profile 5 的真 DoVi 实验路径。
+  bool _useMedia3Dovi = false;
+
+  /// 当前 DoVi 视频流的 URL（视频轨，音频仍由 mpv 播放）。
+  String? _doviVideoUrl;
+
+  Timer? _doviSyncTimer;
+  Timer? _doviPrepareTimer;
+  bool _doviPrepared = false;
+  bool _doviPlaying = false;
+  double _doviRate = 1;
+  bool _doviDisposed = false;
 
   /// 是否应该走「视频在 Flutter 之下」的 SurfaceView 出画。
   ///
@@ -1096,6 +1113,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     final native = nativeSurfaceMode.value;
     return [
       '出画路径: ${native ? 'SurfaceView(HDR)' : 'Texture(8bit)'}',
+      if (_useMedia3Dovi) '真 DoVi 解码: Media3 / ExoPlayer（视频），mpv 音频',
       if (native)
         '原生 Surface: wid=${_nativeWid ?? '-'}，'
             'SurfaceView 尺寸=${_nativeSurfaceSize == null ? '-' : '${_nativeSurfaceSize!.$1}x${_nativeSurfaceSize!.$2}'}',
@@ -1234,7 +1252,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // 播放器还没创建完时先记下来，_initPlayer 会在 VideoController 初始化
     // 完成后补一次，避免刚设置的 vo 被 media_kit 的初始化覆盖成 null。
     if (_videoPlayerController != null) {
-      _applyNativeSurface();
+      if (_useMedia3Dovi) {
+        _scheduleDoviPrepare();
+      } else {
+        _applyNativeSurface();
+      }
       _completeNativeSurfaceReady();
       if (_videoPlayerController!.state.playing) {
         _scheduleNativeProbe();
@@ -1304,6 +1326,83 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     unawaited(NativeVideoSurfaceChannel.setWindowHdr(enabled: false));
   }
 
+  void _releaseDoviPlayer() {
+    _doviPrepareTimer?.cancel();
+    _doviPrepareTimer = null;
+    _doviSyncTimer?.cancel();
+    _doviSyncTimer = null;
+    _doviPrepared = false;
+    _doviPlaying = false;
+    _doviRate = 1;
+    if (_useMedia3Dovi) {
+      unawaited(NativeVideoSurfaceChannel.doviRelease());
+    }
+  }
+
+  void _scheduleDoviPrepare() {
+    if (!_useMedia3Dovi || _doviDisposed) return;
+    _doviPrepared = false;
+    _doviPrepareTimer?.cancel();
+    _doviPrepareTimer = Timer(const Duration(milliseconds: 300), () {
+      _doviPrepareTimer = null;
+      unawaited(_prepareDoviPlayer());
+    });
+  }
+
+  Future<void> _prepareDoviPlayer() async {
+    if (!_useMedia3Dovi || _doviDisposed || _doviPrepared) return;
+    final url = _doviVideoUrl;
+    if (url == null || url.isEmpty) return;
+    final ok = await NativeVideoSurfaceChannel.doviPrepare(
+      url: url,
+      referer: HttpString.baseUrl,
+      userAgent: BrowserUa.pc,
+    );
+    if (_doviDisposed || !_useMedia3Dovi) return;
+    if (!ok) {
+      _doviPrepareTimer?.cancel();
+      _doviPrepareTimer = Timer(const Duration(milliseconds: 500), () {
+        _doviPrepareTimer = null;
+        unawaited(_prepareDoviPlayer());
+      });
+      return;
+    }
+    _doviPrepared = true;
+    _startDoviSync();
+  }
+
+  void _startDoviSync() {
+    _doviSyncTimer?.cancel();
+    _doviSyncTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      unawaited(_syncDovi());
+    });
+  }
+
+  Future<void> _syncDovi() async {
+    if (!_useMedia3Dovi || _doviDisposed || !_doviPrepared) return;
+    final player = _videoPlayerController;
+    if (player == null) return;
+    final playing = player.state.playing;
+    final pos = player.state.position.inMilliseconds;
+    final rate = player.state.rate;
+    if (playing != _doviPlaying) {
+      _doviPlaying = playing;
+      if (playing) {
+        unawaited(NativeVideoSurfaceChannel.doviPlay());
+      } else {
+        unawaited(NativeVideoSurfaceChannel.doviPause());
+      }
+    }
+    if (rate != _doviRate) {
+      _doviRate = rate;
+      unawaited(NativeVideoSurfaceChannel.doviSetRate(rate: rate));
+    }
+    final videoPos = await NativeVideoSurfaceChannel.doviPosition();
+    if ((videoPos - pos).abs() > 250) {
+      unawaited(NativeVideoSurfaceChannel.doviSeek(positionMs: pos));
+    }
+  }
+
   /// 更新 SurfaceView 的布局尺寸。
   ///
   /// 防抖 200ms：小窗拖动/全屏动画期间尺寸逐帧变化，逐帧改
@@ -1360,6 +1459,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   void _applyNativeSurface({Player? target}) {
+    // Media3 DoVi 路径不使用 mpv 视频输出/Surface，视频由原生 ExoPlayer 接管。
+    if (_useMedia3Dovi) return;
     final player = target ?? _videoPlayerController;
     final wid = _nativeWid;
     final size = _nativeSurfaceSize;
@@ -1499,6 +1600,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }) async {
     try {
       _processing = true;
+      // 新片源前先释放旧的 Media3 DoVi 播放器。
+      _releaseDoviPlayer();
+      _useMedia3Dovi = isDolbyVisionProfile5 && Pref.media3Dovi;
+      _doviVideoUrl = _useMedia3Dovi && dataSource is NetworkSource
+          ? dataSource.videoSource
+          : null;
+      _doviDisposed = false;
       // 在创建播放器/首帧之前预切窗口 HDR 模式。
       _updateWindowHdrMode();
       // 换视频/换P：解除倍速锁定并恢复锁定前速度。
@@ -1712,6 +1820,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       ),
     );
 
+    // Media3 DoVi：mpv 只负责音频，视频交给原生 ExoPlayer；必须在此之前
+    // 关闭 mpv 的视频轨，避免两个解码器抢同一个 Surface。
+    if (_useMedia3Dovi) {
+      player.setProperty('vid', 'no');
+    }
+
     // 渲染后端出错（例如 EGL 10bit 配置创建失败）会在这里出现，便于排查黑屏
     player.stream.error.listen((event) {
       debugPrint('[HDR][mpv-error] $event');
@@ -1729,10 +1843,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         androidAttachSurfaceAfterVideoParameters: false,
         hwdec: hwdec,
         // 视频画面由应用层的原生 SurfaceView 提供，media_kit 不创建纹理。
-        androidExternalSurface: nativeSurfaceMode.value,
+        // Media3 DoVi 路径下 mpv 只播放音频，不需要 external surface。
+        androidExternalSurface: nativeSurfaceMode.value && !_useMedia3Dovi,
         // HDR 片源的渲染后端可在设置里切换（mediacodec_embed / gpu-next / gpu），
         // 不同设备驱动对 10bit EGL 的支持差异很大。
-        vo: nativeSurfaceMode.value
+        vo: nativeSurfaceMode.value && !_useMedia3Dovi
             ? HdrBackend.fromValue(Pref.hdrBackend).value
             : null,
       ),
@@ -1747,10 +1862,14 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // 原生 SurfaceView 可能早于播放器就绪，这里补一次挂载。
     // media_kit 初始化会把 vo 复位成 null，所以必须强制重新下发。
     if (_nativeWid != null) {
-      _appliedWid = null;
-      _appliedVo = null;
-      _appliedSurfaceSize = null;
-      _applyNativeSurface(target: player);
+      if (_useMedia3Dovi) {
+        _scheduleDoviPrepare();
+      } else {
+        _appliedWid = null;
+        _appliedVo = null;
+        _appliedSurfaceSize = null;
+        _applyNativeSurface(target: player);
+      }
       _completeNativeSurfaceReady();
     }
 
@@ -3213,6 +3332,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   void dispose() {
     // 离开播放页时复位窗口 HDR 模式，避免设置页/首页留在 HDR 窗口模式。
     _resetWindowHdr();
+    _doviDisposed = true;
+    _releaseDoviPlayer();
     _hdrSnapshotTimer?.cancel();
     // 注意：不要在这里抓快照。销毁过程中 surfaceDestroyed 会把 vo 置回 null，
     // 抓到的会是「拆机态」。播放中每 5 秒的快照已经足够还原真实状态。

@@ -240,6 +240,8 @@ abstract final class VideoUtils {
     final codecs = dolbyVision.codecs ?? '';
     // 只处理 profile 5；profile 8/8.4 保留 DoVi。
     if (!codecs.contains('.05.')) return quality;
+    // Media3 真 DoVi 实验开启时保留 126，不回退 HDR10。
+    if (Pref.media3Dovi) return quality;
     if (!Pref.dolbyVisionFallback) return quality;
     if (hdr == null) return quality;
     if ((hdr.height ?? 0) < (dolbyVision.height ?? 0)) return quality;

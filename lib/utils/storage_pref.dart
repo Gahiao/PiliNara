@@ -1351,6 +1351,10 @@ abstract final class Pref {
   static bool get dolbyVisionFallback =>
       _setting.get(SettingBoxKey.dolbyVisionFallback, defaultValue: true);
 
+  /// profile 5 杜比视界改用 Media3/ExoPlayer 解码（真 DoVi，实验）。
+  static bool get media3Dovi =>
+      _setting.get(SettingBoxKey.media3Dovi, defaultValue: false);
+
   static Set<int> get danmakuBlockType => Set<int>.from(
     _setting.get(SettingBoxKey.danmakuBlockType, defaultValue: const <int>{}),
   );

@@ -147,6 +147,9 @@ class VideoSurfaceHost(
     }
 
     /** Activity 销毁时立即释放。 */
+    /** 供 Media3 DoVi 视频解码直接使用同一个原生 SurfaceView。 */
+    fun surfaceView(): SurfaceView? = surfaceView
+
     fun release() {
         cancelPendingTeardown()
         teardownNow()

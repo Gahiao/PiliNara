@@ -24,6 +24,7 @@ abstract final class SettingBoxKey {
       hdrBackend = 'hdrBackend',
       hdrSurface = 'hdrSurface',
       dolbyVisionFallback = 'dolbyVisionFallback',
+      media3Dovi = 'media3Dovi',
       audioOutput = 'audioOutput',
       bufferSize = 'bufferSize',
       bufferSec = 'bufferSec',
