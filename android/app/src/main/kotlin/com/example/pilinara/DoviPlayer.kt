@@ -5,6 +5,8 @@ import android.net.Uri
 import android.util.Log
 import android.view.SurfaceView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -51,6 +53,16 @@ class DoviPlayer(
             exo.setVideoSurfaceView(surfaceView)
             exo.volume = 0f
             exo.playWhenReady = true
+            exo.addListener(object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    Log.w(TAG, "playback error: ${error.errorCodeName}", error)
+                    // 音频轨合并失败（例如 Dolby/EC3 音轨）时回退到纯视频，
+                    // 避免整个杜比视频黑屏。
+                    if (!audioUrl.isNullOrEmpty()) {
+                        prepare(url, null, referer, userAgent)
+                    }
+                }
+            })
             exo.setMediaSource(mediaSource)
             exo.prepare()
             player = exo
