@@ -86,11 +86,13 @@ abstract final class NativeVideoSurfaceChannel {
   /// Media3 DoVi 视频：把视频流交给原生 ExoPlayer 解码到同一个 SurfaceView。
   static Future<bool> doviPrepare({
     required String url,
+    required String? audioUrl,
     required String referer,
     required String userAgent,
   }) async =>
       await channel.invokeMethod<bool>('doviPrepare', {
         'url': url,
+        'audioUrl': audioUrl,
         'referer': referer,
         'userAgent': userAgent,
       }) ??

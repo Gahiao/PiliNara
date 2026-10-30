@@ -616,6 +616,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   /// 当前 DoVi 视频流的 URL（视频轨，音频仍由 mpv 播放）。
   String? _doviVideoUrl;
+  String? _doviAudioUrl;
 
   Timer? _doviSyncTimer;
   Timer? _doviPrepareTimer;
@@ -1361,6 +1362,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (url == null || url.isEmpty) return;
     final ok = await NativeVideoSurfaceChannel.doviPrepare(
       url: url,
+      audioUrl: _doviAudioUrl,
       referer: HttpString.baseUrl,
       userAgent: BrowserUa.pc,
     );
@@ -1613,6 +1615,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       _useMedia3Dovi = isDolbyVisionProfile5 && Pref.media3Dovi;
       _doviVideoUrl = _useMedia3Dovi && dataSource is NetworkSource
           ? dataSource.videoSource
+          : null;
+      _doviAudioUrl = _useMedia3Dovi && dataSource is NetworkSource
+          ? dataSource.audioSource
           : null;
       _doviDisposed = false;
       // 在创建播放器/首帧之前预切窗口 HDR 模式。

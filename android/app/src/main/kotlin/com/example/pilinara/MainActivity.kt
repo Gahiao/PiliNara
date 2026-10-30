@@ -185,10 +185,11 @@ class MainActivity : AudioServiceActivity() {
                 "surfaceInfo" -> result.success(describeSurface())
                 "doviPrepare" -> {
                     val url = call.argument<String>("url").orEmpty()
+                    val audioUrl = call.argument<String>("audioUrl")
                     val referer = call.argument<String>("referer").orEmpty()
                     val userAgent = call.argument<String>("userAgent").orEmpty()
                     result.success(
-                        doviPlayer?.prepare(url, referer, userAgent) == true,
+                        doviPlayer?.prepare(url, audioUrl, referer, userAgent) == true,
                     )
                 }
                 "doviPlay" -> {

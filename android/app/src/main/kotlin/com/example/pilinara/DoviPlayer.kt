@@ -10,6 +10,7 @@ import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 
 /**
@@ -28,7 +29,12 @@ class DoviPlayer(
 
     private var player: ExoPlayer? = null
 
-    fun prepare(url: String, referer: String, userAgent: String): Boolean {
+    fun prepare(
+        url: String,
+        audioUrl: String?,
+        referer: String,
+        userAgent: String,
+    ): Boolean {
         release()
         val surfaceView = surfaceProvider()
         if (surfaceView == null) {
@@ -36,17 +42,29 @@ class DoviPlayer(
             return false
         }
         return runCatching {
-            val dataSourceFactory = DefaultHttpDataSource.Factory()
-                .setUserAgent(userAgent)
-                .setDefaultRequestProperties(
-                    mapOf(
-                        "Referer" to referer,
-                        "User-Agent" to userAgent,
-                    ),
-                )
-                .setAllowCrossProtocolRedirects(true)
-            val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
+            fun source(u: String): ProgressiveMediaSource {
+                val dataSourceFactory = DefaultHttpDataSource.Factory()
+                    .setUserAgent(userAgent)
+                    .setDefaultRequestProperties(
+                        mapOf(
+                            "Referer" to referer,
+                            "User-Agent" to userAgent,
+                        ),
+                    )
+                    .setAllowCrossProtocolRedirects(true)
+                return ProgressiveMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(MediaItem.fromUri(Uri.parse(u)))
+            }
+
+            // B 站 DASH 的音视频是分开的，videoSource 本身没有音轨；
+            // 有 audioSource 时用 MergingMediaSource 合并，否则 ExoPlayer
+            // 只有视频，音轨会完全缺失。
+            val videoSource = source(url)
+            val mediaSource = if (audioUrl.isNullOrEmpty()) {
+                videoSource
+            } else {
+                MergingMediaSource(videoSource, source(audioUrl))
+            }
             val renderers = DefaultRenderersFactory(activity)
                 .setEnableDecoderFallback(true)
             val exo = ExoPlayer.Builder(activity, renderers).build()
