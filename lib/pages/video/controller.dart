@@ -376,6 +376,9 @@ class VideoDetailController extends GetxController
       unawaited(libraryService.clearLastLocalPlayedIfCid(cid.value));
     } else if (playedTime case final playedTime?) {
       final progressMs = playedTime.inMilliseconds;
+      SmartDialog.showToast(
+        'DBG local save cid=${cid.value} progress=$progressMs',
+      );
       unawaited(watchProgress.put(cid.value.toString(), progressMs));
       unawaited(
         libraryService.updateLastLocalPlayed(
@@ -416,6 +419,9 @@ class VideoDetailController extends GetxController
     } else {
       defaultST = Duration.zero;
     }
+    SmartDialog.showToast(
+      'DBG local read cid=${cid.value} saved=$progress defaultST=${defaultST?.inMilliseconds}',
+    );
     data = PlayUrlModel(timeLength: entry.totalTimeMilli);
     _setVideoHeight();
   }
@@ -1220,6 +1226,9 @@ class VideoDetailController extends GetxController
         } else if (playUrlStartTime != null) {
           defaultST = playUrlStartTime;
         }
+        SmartDialog.showToast(
+          'DBG online read cid=${cid.value} defaultST=${defaultST?.inMilliseconds} last=${data.lastPlayTime} lastCid=${data.lastPlayCid}',
+        );
       }
 
       if (!isUgc && !fromReset && plPlayerController.enablePgcSkip) {
