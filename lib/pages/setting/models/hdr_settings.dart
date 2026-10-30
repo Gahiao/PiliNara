@@ -114,7 +114,7 @@ List<SettingsModel> get hdrSettings => [
         'profile 8 / 8.4 带 HDR10/HLG 基础层，始终保留杜比视界，不会回退',
     leading: const Icon(Icons.brightness_high),
     setKey: SettingBoxKey.dolbyVisionFallback,
-    defaultVal: false,
+    defaultVal: true,
     onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
   ),
   NormalModel(

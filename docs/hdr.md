@@ -37,7 +37,7 @@ Flutter 的 `Texture` 固定是 **RGBA8888**，HDR 元数据在这一步必然�
 | HDR 色调映射 | `hdrToneMapping` | `auto` | `--tone-mapping`，仅纹理/`gpu` 后端有效 |
 | HDR 目标峰值亮度 | `hdrTargetPeak` | `0`（自动） | `--target-peak`，仅纹理/`gpu` 后端有效 |
 | HDR 动态峰值检测 | `hdrComputePeak` | 开 | `--hdr-compute-peak`，仅纹理/`gpu` 后端有效 |
-| 杜比视界兼容模式 | `dolbyVisionFallback` | 关 | 仅 profile 5 回退 HDR10；profile 8/8.4 不回退 |
+| 杜比视界兼容模式 | `dolbyVisionFallback` | 开 | 仅 profile 5 回退 HDR10；profile 8/8.4 不回退 |
 | HDR 状态诊断 | — | — | 查看当前出画路径、`wid`、`vo`、`hwdec-current`、片源色彩等 |
 
 > `mediacodec_embed` 由 MediaCodec 直接解码到 Surface，mpv 拿不到帧，

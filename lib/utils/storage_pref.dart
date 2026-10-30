@@ -1347,9 +1347,9 @@ abstract final class Pref {
   static String get hdrBackend =>
       _setting.get(SettingBoxKey.hdrBackend, defaultValue: 'mediacodec_embed');
 
-  /// 杜比视界兼容模式：硬件解码器无法处理 DoVi 元数据时回退到 HDR10 片源。
+  /// 杜比视界兼容模式（默认开启）：profile 5 回退 HDR10，profile 8 不回退。
   static bool get dolbyVisionFallback =>
-      _setting.get(SettingBoxKey.dolbyVisionFallback, defaultValue: false);
+      _setting.get(SettingBoxKey.dolbyVisionFallback, defaultValue: true);
 
   static Set<int> get danmakuBlockType => Set<int>.from(
     _setting.get(SettingBoxKey.danmakuBlockType, defaultValue: const <int>{}),
