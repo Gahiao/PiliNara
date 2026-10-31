@@ -166,6 +166,10 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
   final RxBool _brightnessIndicator = false.obs;
   Timer? _brightnessTimer;
 
+  /// HDR 遮罩的基准亮度。HDR 直通时面板通常锁在峰值亮度，因此基准固定为
+  /// 1.0，滑动只按相对差值向下压暗；null 表示尚未初始化。
+  double? _nativeBrightnessBase;
+
   late FullScreenMode mode;
 
   late final RxBool showRestoreScaleBtn = false.obs;
@@ -182,7 +186,11 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   StreamSubscription? _brightnessListener;
   void _onBrightnessChanged(double value) {
-    if (mounted && _gestureType != .left) {
+    // HDR 直通时亮度由 nativeBrightness 遮罩独立管理，系统亮度变化不能
+    // 覆盖 _brightnessValue 的 0~1 遮罩刻度，否则下一次滑动会突然压黑。
+    if (mounted &&
+        _gestureType != .left &&
+        !plPlayerController.useNativeSurface) {
       _brightnessValue.value = value;
     }
   }
@@ -440,26 +448,47 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   Future<void> setBrightness(double value) async {
     _brightnessValue.value = value;
-    var applied = false;
-    if (Platform.isIOS || plPlayerController.setSystemBrightness) {
-      try {
-        await ScreenBrightnessPlatform.instance.setSystemScreenBrightness(
-          value,
-        );
-        applied = true;
-      } catch (e) {
-        // “调节系统亮度”需要 WRITE_SETTINGS 授权；未授权时静默失败会让
-        // 用户以为亮度手势坏了，这里回退到应用窗口亮度。
-        debugPrint('setSystemScreenBrightness failed: $e');
+    // HDR 直通时视频在原生 SurfaceView 上，应用窗口亮度在部分设备上
+    // 压不住 HDR 图层（面板被系统锁在峰值亮度），改用 Flutter 侧黑色
+    // 遮罩；SDR / 纹理路径继续走系统或应用窗口亮度。
+    if (plPlayerController.useNativeSurface) {
+      // HDR 直通从面板峰值亮度开始。_brightnessValue 初始是 0，如果直接拿它
+      // 当基准，第一次滑动会把画面瞬间压到接近全黑，所以先对齐到 1.0。
+      if (_nativeBrightnessBase == null ||
+          plPlayerController.nativeBrightness.value < 0) {
+        _nativeBrightnessBase = 1.0;
+        _brightnessValue.value = 1.0;
+        value = 1.0;
       }
-    }
-    if (!applied) {
-      try {
-        await ScreenBrightnessPlatform.instance.setApplicationScreenBrightness(
-          value,
-        );
-      } catch (e) {
-        debugPrint('setApplicationScreenBrightness failed: $e');
+      final base = _nativeBrightnessBase!;
+      // 只压暗到基准值以下：value=base 时不遮，value=0 时全黑。
+      final double dim = base <= 0
+          ? 0.0
+          : ((base - value) / base).clamp(0.0, 1.0).toDouble();
+      plPlayerController.nativeBrightness.value = 1 - dim;
+    } else {
+      _nativeBrightnessBase = null;
+      plPlayerController.nativeBrightness.value = -1;
+      var applied = false;
+      if (Platform.isIOS || plPlayerController.setSystemBrightness) {
+        try {
+          await ScreenBrightnessPlatform.instance.setSystemScreenBrightness(
+            value,
+          );
+          applied = true;
+        } catch (e) {
+          // “调节系统亮度”需要 WRITE_SETTINGS 授权；未授权时静默失败会让
+          // 用户以为亮度手势坏了，这里回退到应用窗口亮度。
+          debugPrint('setSystemScreenBrightness failed: $e');
+        }
+      }
+      if (!applied) {
+        try {
+          await ScreenBrightnessPlatform.instance
+              .setApplicationScreenBrightness(value);
+        } catch (e) {
+          debugPrint('setApplicationScreenBrightness failed: $e');
+        }
       }
     }
     _brightnessIndicator.value = true;

@@ -1,6 +1,7 @@
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 播放页根节点的不透明黑色底 + 视频矩形挖孔。
@@ -110,10 +111,43 @@ class _HdrHolePunchState extends State<HdrHolePunch> {
             painter: _HolePunchPainter(_hole, widget.backgroundColor),
           ),
         ),
+        // 只压暗视频孔：控制栏/亮度指示仍然清晰可读。
+        if (_hole != null)
+          Positioned.fromRect(
+            rect: _hole!,
+            child: HdrNativeBrightnessOverlay(controller: widget.controller),
+          ),
         Positioned.fill(
           child: SizedBox.expand(key: _rootKey, child: widget.child),
         ),
       ],
+    );
+  }
+}
+
+/// HDR 直通时用 Flutter 黑色遮罩压暗画面。
+///
+/// 原生 SurfaceView 的 HDR 图层不受应用窗口亮度控制（尤其设备进入 HDR
+/// 模式后会把面板锁在峰值亮度），亮度手势改为调整这里的遮罩透明度。
+/// [PlPlayerController.nativeBrightness] 为 -1 时不绘制，避免启动时误压黑。
+class HdrNativeBrightnessOverlay extends StatelessWidget {
+  const HdrNativeBrightnessOverlay({super.key, required this.controller});
+
+  final PlPlayerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Obx(() {
+        final brightness = controller.nativeBrightness.value;
+        if (brightness < 0 || brightness >= 1) {
+          return const SizedBox.shrink();
+        }
+        return ColoredBox(
+          color: Colors.black.withValues(alpha: 1 - brightness),
+          child: const SizedBox.expand(),
+        );
+      }),
     );
   }
 }

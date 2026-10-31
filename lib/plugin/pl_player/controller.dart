@@ -143,6 +143,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   double _preDuckVolume = 1.0;
   final RxDouble brightness = (-1.0).obs;
 
+  /// HDR 直通时的画面遮罩亮度。
+  ///
+  /// 原生 SurfaceView 独立于 Flutter 合成，系统/窗口亮度不一定能压住 HDR
+  /// 图层（部分设备进入 HDR 后会把面板锁在峰值亮度）。这里把亮度手势换算成
+  /// Flutter 侧黑色遮罩的透明度，保证至少可以向下调暗；-1 表示不启用遮罩。
+  final RxDouble nativeBrightness = (-1.0).obs;
+
   final RxBool showControls = false.obs;
 
   final RxBool showBrightnessStatus = false.obs;
@@ -1684,6 +1691,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _appliedBackend = null;
     _appliedSurfaceSize = null;
     nativeContentRect.value = null;
+    nativeBrightness.value = -1;
     _nativeSurfaceReady = null;
   }
 

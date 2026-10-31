@@ -278,6 +278,21 @@ HDR 交换链扩展，这条路径通常只输出 SDR，主要用于兼容排查
 7. 以上都正常但面板仍不亮：检查设备是否支持 HDR、系统显示设置是否开启 HDR，
    以及当前窗口是否被系统限制为 SDR。
 
+### 7.1 亮度手势在 HDR 下没有反应
+
+部分设备进入 HDR 输出后会把面板锁在峰值亮度，WindowManager.LayoutParams.screenBrightness
+或系统亮度设置都压不住原生 HDR 图层。HDR 直通时亮度手势改为调整 Flutter 侧的黑色
+遮罩（PlPlayerController.nativeBrightness），只向下压暗、不影响解码/色调映射：
+
+* setBrightness 在 useNativeSurface 为 true 时不再调用系统/应用窗口亮度；
+* HDR 直通从面板峰值亮度开始，首次滑动先把基准和值对齐到 1.0，避免
+  _brightnessValue 初始值较低时第一次滑动把画面瞬间压黑；value=base 不遮、
+  value=0 全黑；切换出/重新进入 HDR 时依据 nativeBrightness 的 -1 复位；
+* 遮罩在 lib/pages/video/widgets/hdr_hole_punch.dart 的
+  HdrNativeBrightnessOverlay，夹在挖孔黑底与页面内容之间，只压暗视频孔，
+  控制栏和亮度指示仍然清晰；IgnorePointer 不拦截手势；
+* SDR / 纹理路径仍走原来的系统或应用窗口亮度，不受影响。
+
 ## 八、代码位置
 
 | 文件 | 作用 |
@@ -290,6 +305,7 @@ HDR 交换链扩展，这条路径通常只输出 SDR，主要用于兼容排查
 | `lib/plugin/pl_player/models/hdr_config.dart` | HDR 模式/算法/解码方式/后端枚举与 mpv 属性 |
 | `lib/pages/setting/models/video_settings.dart` | 设置项、对话框、状态诊断 |
 | `lib/pages/video/controller.dart` | 播放前写入「当前片源是否 HDR」 |
+| `lib/pages/video/widgets/hdr_hole_punch.dart` | 视频挖孔黑底、返回手势压黑、HDR 亮度遮罩 |
 | `lib/common/widgets/pip_mini_video_content.dart` | 小窗视频内容（透明底色 + 原生占位） |
 | `lib/services/pip_overlay_service.dart` | 小窗/系统 PiP 的透明底色适配 |
 | `lib/utils/video_utils.dart` | 杜比视界兼容模式的选质回退 |
