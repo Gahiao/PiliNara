@@ -641,6 +641,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   bool _doviPrepared = false;
   bool _doviPlaying = false;
   bool _doviDisposed = false;
+  // 每次换源/换集递增，用来丢弃上一集尚未完成的 doviPrepare 回调。
+  int _doviGeneration = 0;
 
   /// 是否应该走「视频在 Flutter 之下」的 SurfaceView 出画。
   ///
@@ -1491,6 +1493,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   void _releaseDoviPlayer() {
+    _doviGeneration++;
     _doviPrepareTimer?.cancel();
     _doviPrepareTimer = null;
     _doviSyncTimer?.cancel();
@@ -1508,14 +1511,20 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (!_useMedia3Dovi || _doviDisposed) return;
     _doviPrepared = false;
     _doviPrepareTimer?.cancel();
+    final generation = ++_doviGeneration;
     _doviPrepareTimer = Timer(const Duration(milliseconds: 300), () {
       _doviPrepareTimer = null;
-      unawaited(_prepareDoviPlayer());
+      unawaited(_prepareDoviPlayer(generation));
     });
   }
 
-  Future<void> _prepareDoviPlayer() async {
-    if (!_useMedia3Dovi || _doviDisposed || _doviPrepared) return;
+  Future<void> _prepareDoviPlayer(int generation) async {
+    if (generation != _doviGeneration ||
+        !_useMedia3Dovi ||
+        _doviDisposed ||
+        _doviPrepared) {
+      return;
+    }
     final url = _doviVideoUrl;
     if (url == null || url.isEmpty) return;
     final ok = await NativeVideoSurfaceChannel.doviPrepare(
@@ -1524,12 +1533,14 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       referer: HttpString.baseUrl,
       userAgent: BrowserUa.pc,
     );
-    if (_doviDisposed || !_useMedia3Dovi) return;
+    if (generation != _doviGeneration || _doviDisposed || !_useMedia3Dovi) {
+      return;
+    }
     if (!ok) {
       _doviPrepareTimer?.cancel();
       _doviPrepareTimer = Timer(const Duration(milliseconds: 500), () {
         _doviPrepareTimer = null;
-        unawaited(_prepareDoviPlayer());
+        unawaited(_prepareDoviPlayer(generation));
       });
       return;
     }
@@ -1956,6 +1967,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       await _switchOutputIfNeeded();
       // 配置Player 音轨、字幕等等
       await _createVideoController(dataSource, seekTo, volume, rotate);
+      // 换集/换源时播放器和原生 SurfaceView 通常会被复用，不会再次触发
+      // attachNativeSurface；这里必须重新准备 Media3 DoVi 播放器，否则旧
+      // 播放器已 release，SurfaceView 会一直停在上一集最后一帧（假死定格）。
+      if (_useMedia3Dovi) {
+        _scheduleDoviPrepare();
+      }
 
       if (_playerCount == 0) {
         if (kDebugMode) {
@@ -2087,7 +2104,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // Flutter 纹理固定 RGBA8888，会把 10bit / HDR 元数据丢掉；SurfaceView 才能
     // 让 MediaCodec / libmpv 直接送显并点亮面板 HDR。SDR 片源继续走纹理，
     // 保留硬解、Anime4K 等 mpv 渲染能力。
-    nativeSurfaceMode.value = _wantNativeSurface;
+    // Media3 DoVi 即使没有开启 HDR 直通也需要原生 SurfaceView 承接 ExoPlayer
+    // 的画面；漏掉这一项会让 nativeSurfaceMode=false，原生 Surface 不创建，
+    // Media3 拿不到 surface，表现为整屏黑屏/卡住。
+    nativeSurfaceMode.value = _wantNativeSurface || _useMedia3Dovi;
     _resetNativeSurfaceState();
     _nativeSurfaceReady = nativeSurfaceMode.value ? Completer<void>() : null;
     debugPrint(
@@ -2250,6 +2270,22 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       _videoPlayerController = player;
       if (isAnim && superResolutionType.value != .disable) {
         await setShader();
+      }
+    } else {
+      // 复用播放器换集时，出画方式可能在 Media3 DoVi 与 mpv 原生出画之间
+      // 切换（例如 DoVi 分P → HDR10 分P）。track 选择和 vo 必须跟着改，
+      // 否则会沿用上一集的 vid=no / vo=null，表现为有音频无画面或定格。
+      if (_useMedia3Dovi) {
+        // 让下一次 _applyNativeSurface 重新下发 vo/wid。
+        _appliedWid = null;
+        _appliedVo = null;
+        _appliedSurfaceSize = null;
+        player.setProperty('vid', 'no');
+        player.setProperty('aid', 'no');
+        player.setProperty('vo', 'null');
+      } else if (nativeSurfaceMode.value) {
+        player.setProperty('aid', 'auto');
+        _applyNativeSurface(target: player);
       }
     }
 
