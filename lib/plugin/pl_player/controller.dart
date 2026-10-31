@@ -2270,6 +2270,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     danmakuController?.clear();
 
     var player = _videoPlayerController;
+    // 复用播放器换集时，mpv 的 VO 可能在新文件 open 后失效，表现为有音频
+    // 但原生 SurfaceView 一直黑屏。记录是否复用，open 完成后重新挂一次。
+    final reusingPlayer = player != null;
 
     if (player == null) {
       player = await _initPlayer();
@@ -2348,6 +2351,18 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       ),
       play: false,
     );
+    // 同一个 mpv 实例换文件后，VO 可能被重置（wid/vo 丢失），而界面不会
+    // 重新 attach SurfaceView。此时按已保存的 wid 重新初始化原生出画，
+    // 且发生在 play 之前，不会出现可见黑闪。
+    if (reusingPlayer &&
+        nativeSurfaceMode.value &&
+        !_useMedia3Dovi &&
+        _nativeWid != null) {
+      _appliedWid = null;
+      _appliedVo = null;
+      _appliedBackend = null;
+      _applyNativeSurface(target: player);
+    }
     applyVideoPictureParameters(player);
     debugPrint(
       '[HDR] open: hdrSource=$isHdrSource surface=${nativeSurfaceMode.value} '
