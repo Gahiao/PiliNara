@@ -11,7 +11,7 @@ Flutter 的 `Texture` 固定是 **RGBA8888**，HDR 元数据在这一步必然�
 | 片源 | 出画方式 | 说明 |
 | --- | --- | --- |
 | SDR | Flutter 纹理（media_kit 原路径） | 保留硬解、Anime4K、色调映射等全部 mpv 渲染能力 |
-| HDR / 杜比视界 | **Flutter 之下的原生 SurfaceView** | MediaCodec 直接送显，系统按 HDR 色彩空间输出，真正激发面板 HDR |
+| HDR / 杜比视界 | **Flutter 之下的原生 SurfaceView** | 默认 `mediacodec_embed` 由解码器直接送显；也可选 `gpu-next` 走 Vulkan 交换链输出 |
 
 关键点：
 
@@ -31,12 +31,12 @@ Flutter 的 `Texture` 固定是 **RGBA8888**，HDR 元数据在这一步必然�
 | --- | --- | --- | --- |
 | HDR 支持 | `enableHdr` | 开 | 总开关。关闭后 HDR 片源也走纹理（只做色调映射） |
 | HDR 直通出画 | `hdrSurface` | **开** | HDR 片源改用 SurfaceView 直通送显；切换后重开视频生效 |
-| HDR 渲染后端 | `hdrBackend` | **`mediacodec_embed`** | 唯一确定能点亮 HDR 的后端；`gpu-next` / `gpu` 为实验项 |
+| HDR 渲染后端 | `hdrBackend` | **`mediacodec_embed`** | `mediacodec_embed`：解码器直通，最稳；`gpu-next`：libplacebo + Vulkan，实验性 HDR；`gpu-next-gl` / `gpu`：OpenGL 兼容路径 |
 | HDR 解码方式 | `hdrHwdecMode` | `auto` | 仅影响纹理路径；直通出画 + `mediacodec_embed` 时固定 `mediacodec` |
 | HDR 输出模式 | `hdrOutputMode` | `auto` | `passthrough` 会额外写 `target-colorspace-hint=yes`（对纹理路径基本无效） |
-| HDR 色调映射 | `hdrToneMapping` | `auto` | `--tone-mapping`，仅纹理/`gpu` 后端有效 |
-| HDR 目标峰值亮度 | `hdrTargetPeak` | `0`（自动） | `--target-peak`，仅纹理/`gpu` 后端有效 |
-| HDR 动态峰值检测 | `hdrComputePeak` | 开 | `--hdr-compute-peak`，仅纹理/`gpu` 后端有效 |
+| HDR 色调映射 | `hdrToneMapping` | `auto` | `--tone-mapping`，纹理 / `gpu-next` / `gpu` 路径有效；`mediacodec_embed` 不生效 |
+| HDR 目标峰值亮度 | `hdrTargetPeak` | `0`（自动） | `--target-peak`，纹理 / `gpu-next` / `gpu` 路径有效 |
+| HDR 动态峰值检测 | `hdrComputePeak` | 开 | `--hdr-compute-peak`，纹理 / `gpu-next` / `gpu` 路径有效 |
 | 杜比视界兼容模式 | `dolbyVisionFallback` | 开 | 仅 profile 5 回退 HDR10；profile 8/8.4 不回退 |
 | HDR 状态诊断 | — | — | 查看当前出画路径、`wid`、`vo`、`hwdec-current`、片源色彩等 |
 
@@ -52,9 +52,10 @@ Flutter 的 `Texture` 固定是 **RGBA8888**，HDR 元数据在这一步必然�
    一次性按最终矩形添加，不存在「先 1×1 再跳位」的黑闪；
 2. `setRect`：页面滚动、全屏/半屏、旋转、小窗拖动时逐帧只更新布局；
 3. `surfaceCreated`：把 `android.view.Surface` 的 global ref（`wid`）回传 Dart；
-4. 不再主动调用 `window.setColorMode(COLOR_MODE_HDR)`：该调用会让整块屏幕切换到
-   HDR 显示模式，部分设备表现为「突然高亮一下」，且画面未就绪时会一直停在亮屏黑画面。
-   HDR 由 MediaCodec 输出 buffer 的 dataspace 交给系统处理（原生 `setHdr` 通道保留但不再使用）；
+4. 窗口 HDR 模式只对真正有 HDR 输出能力的后端预切换（`mediacodec_embed` 与
+   `gpu-next` Vulkan），并在播放器/首帧出现之前完成，避免首帧出声时整屏亮一下。
+   `gpu-next-gl` / `gpu` 不切换窗口 HDR，否则 SDR 画面会被系统当成 HDR 显示而发灰。
+   原生 `setHdr` 通道保留但已不再使用；
 5. `remove`：延迟 400ms 销毁。页面 ↔ 小窗切换时新旧控件会短暂共存，
    立即销毁会导致 Surface 重建、mpv 重新初始化 → 黑闪；
 6. `capture`：用 `PixelCopy` 抓当前画面，供 HDR 直通时截图。
@@ -84,7 +85,9 @@ Dart 侧 `lib/plugin/pl_player/utils/native_video_surface.dart`：
   HDR 直通时必须跳过（`if (plPlayerController?.useNativeSurface != true)`），
   否则会出现「挖孔正确、采样 mean=227、孔内仍然全黑」。
   这是最终定位到的直接原因。
-* 播放页根节点用 `HdrHolePunch` 铺黑，只把视频矩形挖成透明。
+* 播放页根节点用 `HdrHolePunch` 铺黑，只把视频矩形挖成透明；
+* 预测性返回时用 `HdrVideoBlackout` 只压黑当前视频矩形，页面其余部分仍然可见，
+  不再盖整屏黑幕。
 
 ### Flutter 必须用 surface 渲染模式（FlutterSurfaceView）
 
@@ -115,21 +118,92 @@ stub 中已移除，运行时用反射读取，读不到显示 `?`）。
 
 真 HDR 需要显示面板切到 HDR 模式。部分设备只支持**全局** HDR 模式（而不是按层合成
 HDR/SDR），进入 HDR 播放时整个屏幕（包括 SDR 的弹幕/控件/简介）会变亮一次。
-应用层已经不再调用 `window.setColorMode`，这个切换是系统根据 HDR Surface 的 dataspace
-自动完成的，应用无法消除。不希望出现切换时，关闭「HDR 直通出画」走 8bit 色调映射。
+
+应用会在 `setDataSource` 阶段、首帧之前通过 `setWindowHdr` 预切窗口色彩模式
+（`window.setColorMode(COLOR_MODE_HDR)`），让这次跳变发生在加载/黑屏阶段而不是首帧
+出声时；离开播放页时复位为 `COLOR_MODE_DEFAULT`。它只对 `mediacodec_embed` 与
+`gpu-next` Vulkan 生效。即使不预切，部分设备也会根据 HDR Surface 的 dataspace 自动
+切换，应用无法完全消除；不希望出现跳变时，关闭「HDR 直通出画」走 8bit 色调映射。
 
 ## 四、mpv 参数（HDR 路径）
 
+### 4.1 mediacodec_embed（默认，推荐）
+
 ```text
 vo=mediacodec_embed
-hwdec=mediacodec            # mediacodec_embed 必须直通硬解
+hwdec=mediacodec            # 必须直通硬解
 wid=<SurfaceView 的 Surface global ref>
 android-surface-size=WxH    # SurfaceView 布局尺寸（不是视频编码尺寸）
 vid=auto
+target-colorspace-hint=yes
 ```
 
-`target-colorspace-hint`、`tone-mapping` 等仍会写入，但在 `mediacodec_embed` 下不参与
-最终画面，只对 `gpu-next` / `gpu` 实验后端有意义。
+`tone-mapping` / `hdr-compute-peak` / `dither` 仍会写入，但这条路径下 mpv 拿不到帧，
+参数不参与最终画面，HDR 完全由 MediaCodec 输出 buffer 的 dataspace 决定。
+
+### 4.2 gpu-next + Vulkan（实验）
+
+需要带 Vulkan 的 libmpv 构建（本仓库 fork：
+`https://github.com/Gahiao/libmpv-android-video-build`，构建时打开 `MPV_VULKAN` /
+`LIBPLACEBO_VULKAN`，并且 **libplacebo 必须带 SPIR-V 编译器 shaderc**）。
+`ra_ctx_vulkan_android`（`gpu-context=androidvk`）是 fork 新增的 Android Vulkan 上下文。
+
+> **没有 shaderc 会直接黑屏**：libplacebo 的 Vulkan 后端要用 shaderc/glslang 编译
+> GLSL。只开 `-Dvulkan=enabled` 而没有 `-Dshaderc=enabled` 时，mpv 日志会出现
+> `Failed initializing any SPIR-V compiler! Maybe libplacebo was built without support
+> for either libshaderc or glslang?`，随后 `Failed initializing vulkan device`，
+> 表现为音频/进度正常但画面纯黑。fork 的 `dep_libplacebo=(shaderc)` 与
+> `libplacebo.sh -Dshaderc=enabled` 已修复这一点。
+
+```text
+gpu-api=vulkan
+gpu-context=androidvk
+vo=gpu-next
+gpu-dumb-mode=no
+target-colorspace-hint=yes
+target-colorspace-hint-mode=target
+target-colorspace-hint-strict=no
+target-prim=auto
+target-trc=auto
+hdr-compute-peak=yes
+gamut-mapping-mode=auto
+dither-depth=auto
+video-output-levels=auto
+wid=<SurfaceView 的 Surface global ref>
+```
+
+顺序很重要：**先 `vo=null` → 写 `gpu-api` / `gpu-context` → 给 `wid` →
+`vo=gpu-next` → 再写一次 HDR 属性**。`gpu-context` 只在 VO 创建时读取一次；
+`target-colorspace-hint` / `target-prim` / `target-trc` 是 VO 选项，`vo=null`
+时写入会被忽略，必须在 VO 创建后再写一次（`reset: false`，避免把刚协商好的
+HDR 交换链复位成 SDR）。
+
+> **media_kit 会覆盖 `gpu-context`**：`AndroidVideoController.create` 在
+> `Player.create` 之后无条件写入 `vo=null`、`gpu-context=android`、`opengl-es=yes`、
+> `force-window=yes`（`third_party/media_kit_video/lib/src/video_controller/android_video_controller/real.dart`）。
+> 如果只在创建播放器前写 Vulkan 参数，`gpu-context` 一定会被改回 `android`，gpu-next
+> 永远走 OpenGL。因此 `PlPlayerController._initPlayer()` 在 `VideoController.create`
+> 之后补写一次 HDR 属性，`_applyNativeSurface()` 在 `vo=gpu-next` 之前写初始化参数、
+> 在 `vo=gpu-next` 之后（首帧前）再补写一次 HDR 目标属性。
+
+`gpu-next` 的 `vo_gpu_next` 在 `target-colorspace-hint=yes` 且上下文没有报告目标
+色彩空间（`ra_ctx_vulkan_android` 的 `target_csp` 返回空）时，会按 HDR10（PQ/BT.2020）
+构造 hint，再通过 `VK_EXT_swapchain_colorspace` 协商交换链。
+
+**自动回退**：播放开始 2.5 秒后读取 `vo-configured`；若仍为 `no`，说明当前
+libmpv 的 Vulkan VO 初始化失败（最常见原因就是缺 shaderc），应用会设置
+`_vulkanVoUnavailable` 并自动回退：HDR 片源改用 `mediacodec_embed` 直通，
+保住面板 HDR 亮度；SDR / 杜比兼容路径改用 `gpu-next OpenGL`。回退时重新下
+`vo/wid`；SDR / OpenGL 路径会关闭窗口 HDR 预切。状态诊断会显示「已自动回退
+（原 gpu-next Vulkan）」以及「Vulkan 自动回退: 已触发」。设置页重新选择后端
+会清除该标记，允许再次尝试 Vulkan。
+
+### 4.3 gpu-next OpenGL / gpu（兼容）
+
+`gpu-next-gl` 使用 `gpu-api=opengl` / `gpu-context=android` 并写 `fbo-format=rgba16hf`
+（`fbo-format` 是 OpenGL 选项，Vulkan 路径不能写），同时显式写
+`target-colorspace-hint=no`，让 libplacebo 正常 tone map 回 SDR。Android EGL 没有
+HDR 交换链扩展，这条路径通常只输出 SDR，主要用于兼容排查。
 
 ## 五、片源获取
 
@@ -151,13 +225,23 @@ vid=auto
 
 ## 六、平台能力与已知限制
 
-1. **libmpv 构建没有 Android HDR 输出能力**（缺 `ANativeWindow_setBuffersDataSpace`
-   / 10bit EGL 色彩空间扩展），所以 `gpu-next` + `target-colorspace-hint` 实际不会
-   点亮 HDR；只有 `mediacodec_embed` 直通可行。
-2. **杜比视界 profile 5**：使用 IPTPQc2 色彩空间，当前 `mediacodec_embed` 直通会把它
-   当成 SDR（诊断里表现为 `bt.709 / bt.1886`、`sig-peak=0`）导致偏色。开启「杜比视界
-   兼容模式」后，如果存在同分辨率 HDR10（125）片源，会自动改用 HDR10。兼容模式
-   只处理 profile 5；profile 8/8.4 带 HDR10/HLG 基础层，始终保留 DoVi 直通。
+1. **gpu-next Vulkan 仍是实验路径**。libmpv fork 增加了 `ra_ctx_vulkan_android`，
+   gpu-next 可通过 `VK_EXT_swapchain_colorspace` 请求 HDR10 交换链；但 fork 的
+   `video/out/vulkan/context_android.c` 只调用 `ANativeWindow_setBuffersGeometry`，
+   没有调用 `ANativeWindow_setBuffersDataSpace`，部分 ROM 仍可能把 Vulkan 交换链
+   当 SDR 合成（表现为画面正常但面板不切 HDR，或颜色发灰）。**确定能点亮 HDR 的
+   仍是 `mediacodec_embed`**；Vulkan 路径因设备驱动差异或 libmpv 缺少 shaderc
+   可能黑屏。应用已内置 `vo-configured` 检测：HDR 片源自动回退到
+   `mediacodec_embed` 直通，SDR 路径回退 `gpu-next-gl`；也可以手动切后端。
+   此外 fork 的构建矩阵里 `MPV_VULKAN` 与 `LIBPLACEBO_VULKAN` 必须同时打开；只开
+   其中一个会出现 GL/mediacodec 输出全黑（fork 提交 `effde5e` 用于二分定位）。
+2. **杜比视界 profile 5**：使用 IPTPQc2 色彩空间，`mediacodec_embed` 直通会把它
+   当成 SDR（诊断里表现为 `bt.709 / bt.1886`、`sig-peak=0`）导致偏色。选择
+   `gpu-next` / `gpu-next-gl` 时由 libplacebo 解析 DoVi RPU，保留 126 原片源，
+   不再触发兼容模式回退，也不走 Media3；`mediacodec_embed` / `gpu` 下开启「杜比视界
+   兼容模式」才会改用同分辨率 HDR10（125）。兼容模式只处理 profile 5；profile
+   8/8.4 带 HDR10/HLG 基础层，始终保留 DoVi 直通。走 gpu-next 的 profile 5 会让
+   窗口进入 HDR 模式（Vulkan 交换链按 HDR10 输出），这是正常行为。
 3. **手势限制**：原生 SurfaceView 是独立图层，无法跟随 Flutter 的旋转与镜像。
    HDR 直通时禁用双指旋转、自动重置镜像；缩放/平移通过矩形同步仍然可用。
 4. **PiP**：支持，但小窗圆角无法裁切原生图层（会看到直角视频）；
@@ -174,9 +258,18 @@ vid=auto
 1. `出画路径` 必须是 `SurfaceView(HDR)`；如果是 `Texture(8bit)`，说明当前画质不是
    HDR/杜比视界档位，或关闭了「HDR 直通出画」/「HDR 支持」/硬解；
 2. `原生 Surface` 的 `wid` 不为 `-`；为 `-` 说明 SurfaceView 还没创建/挂载；
-3. `vo` 应为 `mediacodec_embed`，`hwdec-current` 应为 `mediacodec`；
-4. `视频色彩` 的 gamma 为 `pq` / `hlg` 才是真 HDR 片源；`bt.1886` 是 SDR；
-5. 以上都正常但面板仍不亮：检查设备是否支持 HDR、系统显示设置是否开启 HDR，
+3. 按后端核对 `vo` / `gpu-api` / `gpu-context`：
+   * `mediacodec_embed`：`vo=mediacodec_embed`，`hwdec-current=mediacodec`；
+   * `gpu-next`：`vo=gpu-next`、`gpu-api=vulkan`、`gpu-context=androidvk`，
+     `hwdec-current` 应为 `mediacodec-copy` / `auto-copy`（mpv 需要拿到帧）；
+   * `gpu-next-gl`：`gpu-api=opengl`、`gpu-context=android`；
+4. 如果 `gpu-context` 仍显示 `android`，说明 media_kit 的覆盖没有被补写覆盖掉——
+   检查 `_initPlayer` 中 `VideoController.create` 之后的 `_applyHdrProperties` 调用；
+5. `gpu-next` 还要确认 `target-colorspace-hint=yes`、`target-prim=bt.2020`、
+   `target-trc=pq` 已经生效；这三项是 VO 选项，只在 `vo=gpu-next` 之后补写
+   才会被 libplacebo 看到；
+6. `视频色彩` 的 gamma 为 `pq` / `hlg` 才是真 HDR 片源；`bt.1886` 是 SDR；
+7. 以上都正常但面板仍不亮：检查设备是否支持 HDR、系统显示设置是否开启 HDR，
    以及当前窗口是否被系统限制为 SDR。
 
 ## 八、代码位置
@@ -194,7 +287,8 @@ vid=auto
 | `lib/common/widgets/pip_mini_video_content.dart` | 小窗视频内容（透明底色 + 原生占位） |
 | `lib/services/pip_overlay_service.dart` | 小窗/系统 PiP 的透明底色适配 |
 | `lib/utils/video_utils.dart` | 杜比视界兼容模式的选质回退 |
-| `third_party/media_kit_video` | 仅保留 `androidExternalSurface`（不创建纹理，由应用提供 Surface） |
+| `third_party/media_kit_video` | 仅保留 `androidExternalSurface`（不创建纹理，由应用提供 Surface）；注意它会覆盖 `gpu-context` |
+| `third_party/libmpv-android-video-build` | libmpv / libplacebo 带 Vulkan 的构建 fork（`androidvk` 上下文、构建矩阵） |
 
 ## 九、自测建议
 
@@ -207,3 +301,44 @@ vid=auto
 5. 截图（HDR 直通下走 PixelCopy）应能正常保存；
 6. 切到 SDR 画质：应自动重建为纹理出画，Anime4K 等能力恢复；
 7. 关闭「HDR 直通出画」后重开视频：回到纹理路径，色调映射参数应即时可调。
+
+## 十、打开视频白屏 / 灰屏修复记录
+
+打开视频时曾出现整屏灰色（约 `#b5b5b5`）或启动时白屏，两者来源不同：
+
+### 10.1 整屏灰色 = Flutter release ErrorWidget
+
+`lib/pages/video/view.dart` 为了实现预测性返回手势的黑色遮罩，曾把 `ModalRoute` 强转成
+`Listenable`：
+
+```dart
+// 错误：ModalRoute 不是 Listenable
+animation: (route as Listenable?) ?? kAlwaysDismissedAnimation,
+```
+
+`ModalRoute` 继承自 `TransitionRoute`，并没有实现 `Listenable`，这个 cast 在 build 时
+抛出 `TypeError`。release 模式下 Flutter 用 `ErrorWidget` 覆盖整页，颜色就是
+`0xF0C0C0C0` 叠在黑底上的灰色，看起来像「白屏/灰屏」。按返回键能立刻回到首页，
+因为路由本身没有问题。
+
+正确做法是使用 `NavigatorState.userGestureInProgressNotifier`（Flutter 自己的
+`_ModalScopeState` 也用它跟踪 `popGestureInProgress`）：
+
+```dart
+final Listenable? gesture = route?.navigator?.userGestureInProgressNotifier;
+...
+animation: gesture ?? kAlwaysDismissedAnimation,
+```
+
+> 如果以后再次看到整屏灰色，先用 `flutter run` 看 build 异常；不要只按「白屏」去查
+> 原生 Surface。
+
+### 10.2 启动白屏 = LaunchTheme 的白色启动图
+
+* `android/app/src/main/res/drawable/background.png` 是一个 **1×1 白色像素**，旧的
+  `launch_background.xml`（含 `-v21` / `night` 变体）把它铺满全屏；
+* `values-v31/styles.xml` 的 `android:windowSplashScreenBackground` 还是 `#ffffff`。
+
+Android 12+ 在 Flutter 首帧之前显示 splash，于是先白一下。现在四个
+`launch_background.xml` 都改成 `@android:color/black`，`values-v31` /
+`values-night-v31` 的 splash 背景也统一为 `#000000`，与 `NormalTheme` 的黑色窗口背景一致。

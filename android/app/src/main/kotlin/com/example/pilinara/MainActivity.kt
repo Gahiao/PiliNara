@@ -152,8 +152,8 @@ class MainActivity : AudioServiceActivity() {
                     result.success(null)
                 }
                 "setHdr" -> {
-                    // 保留方法名以兼容旧调用；当前实现不再主动切换窗口色彩模式，
-                    // 避免整屏高亮闪屏。
+                    // 旧版接口，保留方法名兼容；窗口 HDR 改由 setWindowHdr 控制，
+                    // 只在播放器首帧前预切，避免页面停留时整屏高亮。
                     result.success(null)
                 }
                 "setWindowHdr" -> {

@@ -69,4 +69,5 @@
 
 设置 → 播放设置 →「HDR 直通出画」关闭后，HDR 片源也走 8bit 纹理（只做色调映射）。
 该开关默认开启；遇到个别 ROM 的透明图层/显示模式问题时可关闭后重开视频。
-`hdrBackend` 也可切回 `gpu-next` / `gpu` 做对照实验。
+`hdrBackend` 也可在 `gpu-next`（Vulkan）/ `gpu-next-gl`（OpenGL）/ `gpu` 之间切换做对照；
+Vulkan 初始化失败时优先切回 `mediacodec_embed` 或 `gpu-next-gl`。

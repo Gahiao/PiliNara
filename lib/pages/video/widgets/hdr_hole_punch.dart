@@ -17,10 +17,14 @@ class HdrHolePunch extends StatefulWidget {
     super.key,
     required this.controller,
     required this.child,
+    this.backgroundColor = const Color(0xFF000000),
   });
 
   final PlPlayerController controller;
   final Widget child;
+
+  /// 挖孔之外的底色。返回手势期间传透明，让下层页面透出来。
+  final Color backgroundColor;
 
   @override
   State<HdrHolePunch> createState() => _HdrHolePunchState();
@@ -102,7 +106,9 @@ class _HdrHolePunchState extends State<HdrHolePunch> {
       fit: StackFit.expand,
       children: [
         Positioned.fill(
-          child: CustomPaint(painter: _HolePunchPainter(_hole)),
+          child: CustomPaint(
+            painter: _HolePunchPainter(_hole, widget.backgroundColor),
+          ),
         ),
         Positioned.fill(
           child: SizedBox.expand(key: _rootKey, child: widget.child),
@@ -113,14 +119,15 @@ class _HdrHolePunchState extends State<HdrHolePunch> {
 }
 
 class _HolePunchPainter extends CustomPainter {
-  const _HolePunchPainter(this.hole);
+  const _HolePunchPainter(this.hole, this.color);
 
   final Rect? hole;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     final full = Offset.zero & size;
-    final paint = Paint()..color = const Color(0xFF000000);
+    final paint = Paint()..color = color;
     final hole = this.hole;
     if (hole == null || hole.isEmpty) {
       canvas.drawRect(full, paint);
@@ -152,5 +159,52 @@ class _HolePunchPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_HolePunchPainter oldDelegate) => oldDelegate.hole != hole;
+  bool shouldRepaint(_HolePunchPainter oldDelegate) =>
+      oldDelegate.hole != hole || oldDelegate.color != color;
+}
+
+/// 预测性返回期间只压黑视频矩形，不挡整页。
+///
+/// 原生 SurfaceView 不跟随 Flutter 的 scale/translate，返回手势开始后视频会
+/// 停在原位、提前露出后面的页面；之前用整屏黑幕遮住，视觉上整个页面会突然
+/// 变黑。这里复用 [HdrHolePunch] 算出的本地视频矩形，只覆盖视频区域。
+class HdrVideoBlackout extends StatelessWidget {
+  const HdrVideoBlackout({super.key, required this.controller});
+
+  final PlPlayerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ValueListenableBuilder<Rect?>(
+        valueListenable: controller.nativeHoleRect,
+        builder: (context, rect, _) {
+          if (rect == null || rect.isEmpty) {
+            return const SizedBox.expand();
+          }
+          return CustomPaint(
+            painter: _VideoBlackoutPainter(rect),
+            child: const SizedBox.expand(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _VideoBlackoutPainter extends CustomPainter {
+  const _VideoBlackoutPainter(this.rect);
+
+  final Rect rect;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final area = rect.intersect(Offset.zero & size);
+    if (area.isEmpty) return;
+    canvas.drawRect(area, Paint()..color = const Color(0xFF000000));
+  }
+
+  @override
+  bool shouldRepaint(_VideoBlackoutPainter oldDelegate) =>
+      oldDelegate.rect != rect;
 }

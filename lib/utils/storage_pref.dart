@@ -1339,15 +1339,17 @@ abstract final class Pref {
   static String get hdrHwdecMode =>
       _setting.get(SettingBoxKey.hdrHwdecMode, defaultValue: 'auto');
 
-  /// HDR 渲染后端（gpu-next / gpu / mediacodec_embed），见 HdrBackend。
+  /// HDR 渲染后端（gpu-next Vulkan / gpu-next OpenGL / gpu /
+  /// mediacodec_embed），见 HdrBackend。
   ///
-  /// 默认 mediacodec_embed：当前 libmpv 构建没有 Android HDR 输出能力
-  /// （缺 ANativeWindow_setBuffersDataSpace / EGL 色彩空间扩展），
-  /// 只有解码器直通 Surface 才能让系统点亮 HDR。
+  /// 默认 mediacodec_embed：兼容性最好，由系统直通 HDR。
+  /// gpu-next 在带 Vulkan 的 libmpv 构建上可走 Vulkan 交换链协商 HDR。
   static String get hdrBackend =>
       _setting.get(SettingBoxKey.hdrBackend, defaultValue: 'mediacodec_embed');
 
   /// 杜比视界兼容模式（默认开启）：profile 5 回退 HDR10，profile 8 不回退。
+  ///
+  /// 选择 gpu-next 时由 libplacebo 解析 DoVi RPU，此开关不再触发回退。
   static bool get dolbyVisionFallback =>
       _setting.get(SettingBoxKey.dolbyVisionFallback, defaultValue: true);
 

@@ -5,6 +5,7 @@ import 'package:PiliPlus/models/common/video/video_quality.dart';
 import 'package:PiliPlus/models/video/play/url.dart'
     show AudioItem, VideoItem, FormatItem;
 import 'package:PiliPlus/models_new/live/live_room_play_info/codec.dart';
+import 'package:PiliPlus/plugin/pl_player/models/hdr_config.dart';
 import 'package:PiliPlus/utils/cdn_node_store.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -214,9 +215,12 @@ abstract final class VideoUtils {
 
   /// 杜比视界兼容模式（仅 profile 5）。
   ///
-  /// profile 5 使用 IPTPQc2，当前 `mediacodec_embed` 直通路径无法解析 RPU，
+  /// profile 5 使用 IPTPQc2，`mediacodec_embed` 直通路径无法解析 RPU，
   /// 会按 SDR（bt.709/bt.1886）出画导致偏色；开启兼容模式后，若存在分辨率
   /// 不低于杜比流的 HDR10（画质 id `125`）片源，则改用 HDR10。
+  ///
+  /// 渲染后端是 gpu-next（libplacebo）时例外：它可以直接解析 profile 5 的
+  /// RPU 与 IPTPQc2，因此保留 126，让 DoVi 真正走 gpu-next。
   ///
   /// profile 8 / 8.4 带 HDR10/HLG 兼容基础层，兼容模式**不**回退它们，
   /// 始终保留杜比视界直通。
@@ -240,6 +244,10 @@ abstract final class VideoUtils {
     final codecs = dolbyVision.codecs ?? '';
     // 只处理 profile 5；profile 8/8.4 保留 DoVi。
     if (!codecs.contains('.05.')) return quality;
+    // gpu-next 走 libplacebo，可以直接解析 profile 5 的 RPU 与 IPTPQc2，
+    // 不需要为了兼容而换成 HDR10。用户选择 gpu-next 时优先保留 DoVi。
+    final backend = HdrBackend.fromValue(Pref.hdrBackend);
+    if (backend.supportsDolbyVision) return quality;
     // Media3 真 DoVi 实验开启时保留 126，不回退 HDR10。
     if (Pref.media3Dovi) return quality;
     if (!Pref.dolbyVisionFallback) return quality;

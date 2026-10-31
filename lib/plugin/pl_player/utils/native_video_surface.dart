@@ -76,7 +76,8 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
         y: rect.$2,
         width: rect.$3,
         height: rect.$4,
-        tenBit: Pref.hdrBackend != HdrBackend.mediacodecEmbed.value,
+        tenBit:
+            HdrBackend.fromValue(Pref.hdrBackend) != HdrBackend.mediacodecEmbed,
       ),
     );
   }
@@ -205,7 +206,9 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
           y: top,
           width: width,
           height: height,
-          tenBit: Pref.hdrBackend != HdrBackend.mediacodecEmbed.value,
+          tenBit:
+              HdrBackend.fromValue(Pref.hdrBackend) !=
+              HdrBackend.mediacodecEmbed,
         ),
       );
       return;

@@ -86,6 +86,9 @@ typedef PlayCallback = Future<void>? Function();
 typedef PlayerInitCallback = Future<void> Function();
 typedef PlayOwner = ({String tag, Type? type});
 
+/// 仅诊断构建开启：把 mpv 的完整日志写到应用外部目录，便于定位 VO 初始化失败。
+const bool _hdrVerboseLog = bool.fromEnvironment('HDR_VERBOSE_LOG');
+
 class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   Player? _videoPlayerController;
   VideoController? _videoController;
@@ -639,8 +642,47 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       Pref.hdrSurface &&
       isHdrSource &&
       // mediacodec_embed 必须硬解；用户关掉硬解时退回纹理，避免黑屏。
-      (HdrBackend.fromValue(Pref.hdrBackend) != HdrBackend.mediacodecEmbed ||
-          Pref.enableHA);
+      (_renderBackend != HdrBackend.mediacodecEmbed || Pref.enableHA);
+
+  /// 当前 libmpv 的 Vulkan VO 是否已确认不可用。
+  ///
+  /// 部分 libmpv 构建打开了 libplacebo 的 Vulkan，却没有编进 SPIR-V 编译器
+  /// （shaderc / glslang）。这种构建上 `vo=gpu-next` + `gpu-context=androidvk`
+  /// 会创建 VO 失败，表现为纯黑屏但音频/进度正常。检测到一次后，本进程内
+  /// 自动改用 gpu-next 的 OpenGL 上下文，避免用户每次都要手动切后端。
+  static bool _vulkanVoUnavailable = false;
+
+  bool get _shouldProbeVulkan =>
+      !_vulkanVoUnavailable &&
+      HdrBackend.fromValue(Pref.hdrBackend) == HdrBackend.gpuNext;
+
+  /// Vulkan 不可用时，HDR 片源是否改走 MediaCodec 直通。
+  ///
+  /// gpu-next OpenGL 只会把 HDR tone map 成 SDR，面板不会进入 HDR 模式，
+  /// 用户看到的就是「亮度激发不起来」。MediaCodec 直通由系统解码送显，
+  /// 虽然绕过 libplacebo，但能保留真正的 HDR 亮度与广色域。
+  bool get _useHdrDirectFallback =>
+      Pref.enableHA &&
+      isHdrSource &&
+      // 杜比视界仍按原有兼容/Media3 逻辑处理，避免 profile 5 偏色。
+      !isDolbyVisionSource &&
+      !isHdrVividSource;
+
+  /// 本次播放实际使用的后端（Vulkan 失败后自动回退）。
+  HdrBackend get _renderBackend {
+    final configured = HdrBackend.fromValue(Pref.hdrBackend);
+    if (configured == HdrBackend.gpuNext && _vulkanVoUnavailable) {
+      return _useHdrDirectFallback
+          ? HdrBackend.mediacodecEmbed
+          : HdrBackend.gpuNextGl;
+    }
+    return configured;
+  }
+
+  /// 设置页切换后端时调用，允许用户主动重试 Vulkan。
+  static void resetVulkanFallback() {
+    _vulkanVoUnavailable = false;
+  }
 
   /// 原生 SurfaceView 出画开关。Rx 以便播放页在出画方式变化时立即重建视频控件。
   final RxBool nativeSurfaceMode = false.obs;
@@ -659,7 +701,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// `mediacodec_embed` 是例外：它必须由 MediaCodec 直接解码到 Surface，
   /// 所以只要走这条 HDR 出画路径，就强制使用 `mediacodec`。
   String? _resolveHwdec() {
-    final backend = HdrBackend.fromValue(Pref.hdrBackend);
+    final backend = _renderBackend;
     if (_wantNativeSurface && backend == HdrBackend.mediacodecEmbed) {
       return 'mediacodec';
     }
@@ -1156,8 +1198,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       'dither: ${read('dither')}',
       'HDR 开关: ${Pref.enableHdr ? '开' : '关'}，'
           '直通出画: ${Pref.hdrSurface ? '开' : '关'}，'
-          '后端: ${HdrBackend.fromValue(Pref.hdrBackend).label}'
-          ' (${HdrBackend.fromValue(Pref.hdrBackend).gpuApi ?? '-'})',
+          '后端: ${_renderBackend.label} (${_renderBackend.gpuApi ?? '-'})'
+          '${_renderBackend != HdrBackend.fromValue(Pref.hdrBackend) ? '，已自动回退（原 ${HdrBackend.fromValue(Pref.hdrBackend).label}）' : ''}',
+      'Vulkan 自动回退: ${_vulkanVoUnavailable ? '已触发（当前 libmpv 缺少 SPIR-V 编译器）' : '未触发'}',
       '片源判定: ${isHdrSource ? (isDolbyVisionSource ? 'HDR / 杜比视界' : (isHdrVividSource ? 'HDR Vivid' : 'HDR')) : 'SDR'}',
       if (sourceCodecs != null) '片源 codecs: $sourceCodecs',
     ].join('\n');
@@ -1211,6 +1254,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   /// HDR 直通画面自检（播放几秒后采样一次，区分解码器黑屏和 Flutter 遮盖）。
   Timer? _nativeProbeTimer;
+
+  /// Vulkan VO 可用性检查：创建失败时自动回退到 gpu-next OpenGL。
+  Timer? _vulkanCheckTimer;
 
   /// 最近一次 SurfaceView 画面采样结果（平均亮度；0 表示全黑）。
   int? _lastProbeMean;
@@ -1275,8 +1321,77 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       _completeNativeSurfaceReady();
       if (_videoPlayerController!.state.playing) {
         _scheduleNativeProbe();
+        _scheduleVulkanVoCheck();
       }
     }
+  }
+
+  /// Vulkan VO 创建失败时自动回退到 gpu-next OpenGL。
+  ///
+  /// 只在 Vulkan 后端、真正开始播放后检查：VO 创建成功时 `vo-configured`
+  /// 为 yes，缺少 SPIR-V 编译器的 libmpv 则一直是 no。回退后重下 vo/wid，
+  /// 并关闭窗口 HDR 预切（EGL 路径输出 SDR），避免继续黑屏。
+  void _scheduleVulkanVoCheck() {
+    _vulkanCheckTimer?.cancel();
+    _vulkanCheckTimer = null;
+    if (!nativeSurfaceMode.value || _useMedia3Dovi) return;
+    if (!_shouldProbeVulkan) return;
+    if (_appliedVo != 'gpu-next' || _appliedBackend != HdrBackend.gpuNext) {
+      return;
+    }
+    _vulkanCheckTimer = Timer(const Duration(milliseconds: 2500), () {
+      _vulkanCheckTimer = null;
+      final player = _videoPlayerController;
+      if (player == null) return;
+      if (!nativeSurfaceMode.value || _useMedia3Dovi) return;
+      if (_appliedBackend != HdrBackend.gpuNext) return;
+      if (!player.state.playing) return;
+      var configured = '';
+      try {
+        configured = player.getProperty('vo-configured');
+      } catch (_) {}
+      if (configured == 'yes') return;
+      _fallbackFromVulkan('vo-configured="$configured"');
+    });
+  }
+
+  /// 把失败的 Vulkan VO 切到 gpu-next OpenGL。
+  ///
+  /// 两个触发点：VO 错误回调（最快）和播放 2.5 秒后的 `vo-configured` 检查
+  /// （覆盖只报 warning、不触发 error 的构建）。重复调用会被标记挡住。
+  void _fallbackFromVulkan(String reason) {
+    if (_vulkanVoUnavailable) return;
+    if (!nativeSurfaceMode.value || _useMedia3Dovi) return;
+    if (HdrBackend.fromValue(Pref.hdrBackend) != HdrBackend.gpuNext) return;
+    final direct = _useHdrDirectFallback;
+    debugPrint(
+      '[HDR] Vulkan VO unavailable ($reason), fallback to '
+      '${direct ? 'mediacodec_embed (HDR)' : 'gpu-next OpenGL (SDR)'}',
+    );
+    _vulkanVoUnavailable = true;
+    SmartDialog.showToast(
+      direct
+          ? 'Vulkan 输出不可用，已自动回退到 MediaCodec 直通（HDR）'
+          : 'Vulkan 输出不可用，已自动回退到 gpu-next OpenGL',
+    );
+    _vulkanCheckTimer?.cancel();
+    _vulkanCheckTimer = null;
+    _nativeProbeTimer?.cancel();
+    _nativeProbeTimer = null;
+    _appliedWid = null;
+    _appliedVo = null;
+    _appliedBackend = null;
+    // VO 初始化失败时 mpv 会自动 deselect 视频轨；只把 vid 设回 auto 是
+    // 无操作，必须先置 no 再让 _applyNativeSurface 写 auto，触发重新选轨。
+    try {
+      _videoPlayerController
+        ?..setProperty('vid', 'no')
+        ..setProperty('vid', 'auto');
+    } catch (_) {}
+    _resetWindowHdr();
+    _updateWindowHdrMode();
+    _applyNativeSurface();
+    _scheduleNativeProbe();
   }
 
   /// 播放开始后采样 SurfaceView 画面。
@@ -1330,7 +1445,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // gpu-next-gl / gpu 的 EGL 路径实际输出 SDR，不能预切窗口 HDR。
     // 杜比视界走 gpu-next 时同样需要 HDR 窗口，否则 Vulkan 交换链没有
     // HDR dataspace；Media3 路径由 ExoPlayer 自己设置，HDR Vivid 交给系统。
-    final backend = HdrBackend.fromValue(Pref.hdrBackend);
+    final backend = _renderBackend;
     final doviViaGpuNext =
         isDolbyVisionSource && backend.isGpuNext && !_useMedia3Dovi;
     final wanted =
@@ -1510,7 +1625,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     final size = _nativeSurfaceSize;
     if (player == null || wid == null || size == null) return;
     if (size.$1 <= 1 || size.$2 <= 1) return;
-    final backend = HdrBackend.fromValue(Pref.hdrBackend);
+    final backend = _renderBackend;
     final vo = backend.vo;
     // gpu-next 与 gpu-next-gl 的 vo 都是 gpu-next，只有 gpu-api 不同；
     // 只比较 vo 会导致切换后端后仍沿用旧的 Vulkan/OpenGL 上下文。
@@ -1546,6 +1661,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           'surface=${size.$1}x${size.$2}',
         ].join(' '),
       );
+      if (needVo && backend == HdrBackend.gpuNext && player.state.playing) {
+        _scheduleVulkanVoCheck();
+      }
     } catch (_) {}
   }
 
@@ -1556,11 +1674,14 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _nativeResizeTimer = null;
     _nativeProbeTimer?.cancel();
     _nativeProbeTimer = null;
+    _vulkanCheckTimer?.cancel();
+    _vulkanCheckTimer = null;
     _nativeOwner = null;
     _nativeWid = null;
     _nativeSurfaceSize = null;
     _appliedWid = null;
     _appliedVo = null;
+    _appliedBackend = null;
     _appliedSurfaceSize = null;
     nativeContentRect.value = null;
     _nativeSurfaceReady = null;
@@ -1602,7 +1723,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         HdrConfig.fromPref().mpvProperties,
       );
       if (hdrSurface) {
-        final backend = HdrBackend.fromValue(Pref.hdrBackend);
+        final backend = _renderBackend;
         // 即使不是 gpu-next，也要显式写回 gpu-api/gpu-context：播放器内
         // 切换后端时，上一次留下的 vulkan/androidvk 不能带到 gpu 路径。
         if (backend.gpuApi != null) {
@@ -1921,6 +2042,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     final opt = {
       'video-sync': Pref.videoSync,
       if (Platform.isAndroid) 'ao': Pref.audioOutput,
+      if (_hdrVerboseLog) ...{
+        'log-file': '/sdcard/Android/data/com.example.pilinara/files/mpv.log',
+        'msg-level': 'all=v',
+      },
       'volume':
           (PlatformUtils.isMobile
                   ? (Pref.enableAppVolume
@@ -1945,8 +2070,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     debugPrint(
       '[HDR] init: enable=${Pref.enableHdr} direct=${Pref.hdrSurface} '
       'hdrSource=$isHdrSource surface=${nativeSurfaceMode.value} '
-      'vo=${nativeSurfaceMode.value ? HdrBackend.fromValue(Pref.hdrBackend).vo : '-'} '
-      'gpu=${HdrBackend.fromValue(Pref.hdrBackend).gpuApi ?? '-'} hwdec=${_resolveHwdec()}',
+      'vo=${nativeSurfaceMode.value ? _renderBackend.vo : '-'} '
+      'gpu=${_renderBackend.gpuApi ?? '-'} hwdec=${_resolveHwdec()}',
     );
 
     final hwdec = _resolveHwdec();
@@ -1967,6 +2092,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // 渲染后端出错（例如 EGL 10bit 配置创建失败）会在这里出现，便于排查黑屏
     player.stream.error.listen((event) {
       debugPrint('[HDR][mpv-error] $event');
+      final message = event.toString().toLowerCase();
+      if (message.contains('video_out') ||
+          message.contains('spir-v') ||
+          message.contains('vulkan device') ||
+          message.contains('gpu context')) {
+        _fallbackFromVulkan('mpv error: $event');
+      }
     });
 
     // HDR / 杜比视界：必须在视频输出初始化前写入，vo 创建时才会读取这些参数
@@ -1986,7 +2118,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         // HDR 片源的渲染后端可在设置里切换（mediacodec_embed / gpu-next / gpu），
         // 不同设备驱动对 10bit EGL 的支持差异很大。
         vo: nativeSurfaceMode.value && !_useMedia3Dovi
-            ? HdrBackend.fromValue(Pref.hdrBackend).vo
+            ? _renderBackend.vo
             : null,
       ),
     );
@@ -2241,6 +2373,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           _updatePlaybackState();
           WakelockPlus.enable();
           _scheduleNativeProbe();
+          _scheduleVulkanVoCheck();
 
           if (_isAutoEnterPip &&
               _autoAudioState != AutoAudioOnlyState.autoAudioOnly) {

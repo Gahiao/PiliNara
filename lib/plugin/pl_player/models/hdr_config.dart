@@ -31,25 +31,96 @@ enum HdrOutputMode {
 
 /// HDR 渲染后端（Android SurfaceView 出画时使用的 `--vo`）。
 ///
-/// 不同设备的 libmpv/GPU 驱动对 10bit EGL 的支持差异很大，这里提供几种
-/// 可选后端，方便逐一切换验证；改完需要重新打开视频。
+/// 不同设备的 libmpv/GPU 驱动对 10bit / HDR 输出的支持差异很大，这里提供
+/// 几种可选后端，方便逐一切换验证；改完需要重新打开视频。
 enum HdrBackend {
-  /// libplacebo 渲染链路，支持 `--target-colorspace-hint`；
-  /// 但当前 libmpv 构建通常没有 Android HDR 输出能力，属于实验项。
-  gpuNext('gpu-next', 'gpu-next（实验）'),
+  /// libplacebo 渲染链路，走本仓库 fork 的 Android Vulkan 上下文
+  /// （`gpu-api=vulkan` / `gpu-context=androidvk`）。Vulkan swapchain 可借助
+  /// `VK_EXT_swapchain_colorspace` 协商 HDR 色彩空间，这是 gpu-next 真正
+  /// 输出 HDR 的路径；仍属实验项，部分 ROM 还需要额外的 dataspace 支持。
+  gpuNext(
+    'gpu-next',
+    'gpu-next',
+    'gpu-next Vulkan（实验）',
+    'vulkan',
+    'androidvk',
+    'libplacebo + Vulkan，可协商 HDR 交换链；需要带 Vulkan 且带 SPIR-V 编译器（shaderc）的 libmpv。初始化失败时 HDR 片源回退 MediaCodec 直通，其余回退 OpenGL',
+  ),
+
+  /// 老版本的 gpu-next 路径：libplacebo + OpenGL/EGL。
+  /// 仍可做 tone mapping，但 Android EGL 没有 HDR 色彩空间扩展，通常只能输出 SDR。
+  gpuNextGl(
+    'gpu-next-gl',
+    'gpu-next',
+    'gpu-next OpenGL（兼容）',
+    'opengl',
+    'android',
+    'libplacebo + OpenGL/EGL；兼容老设备，但通常只能输出 SDR',
+  ),
 
   /// 传统 GPU 渲染，兼容性更好，但通常无法激发 HDR。
-  gpu('gpu', 'gpu（兼容模式）'),
+  gpu(
+    'gpu',
+    'gpu',
+    'gpu（兼容模式）',
+    'opengl',
+    'android',
+    '兼容性最好，但几乎无法激发 HDR',
+  ),
 
   /// 由 MediaCodec 直接解码到 SurfaceView，HDR 由解码器/系统直通，
   /// 不经过 mpv 渲染，因此色调映射等参数不生效。
   /// 这是当前唯一确定能点亮面板 HDR 的后端（需要开启硬解），也是默认值。
-  mediacodecEmbed('mediacodec_embed', 'MediaCodec 直通（推荐）');
+  mediacodecEmbed(
+    'mediacodec_embed',
+    'mediacodec_embed',
+    'MediaCodec 直通（推荐）',
+    null,
+    null,
+    '解码器直接送显，HDR 由系统直通；需要开启硬解',
+  );
 
-  const HdrBackend(this.value, this.label);
+  const HdrBackend(
+    this.value,
+    this.vo,
+    this.label,
+    this.gpuApi,
+    this.gpuContext,
+    this.desc,
+  );
 
+  /// 持久化到设置中的值。
   final String value;
+
+  /// 传给 mpv 的 `--vo`。
+  final String vo;
+
+  /// 设置页展示的名称。
   final String label;
+
+  /// mpv `--gpu-api`；`mediacodec_embed` 不需要。
+  final String? gpuApi;
+
+  /// mpv `--gpu-context`；`mediacodec_embed` 不需要。
+  final String? gpuContext;
+
+  /// 设置页展示的说明。
+  final String desc;
+
+  bool get isGpuNext => this == gpuNext || this == gpuNextGl;
+
+  /// 是否有可能真正把 HDR 交给显示端。
+  ///
+  /// `gpu-next` 走 Vulkan 交换链色彩空间协商；`mediacodec_embed` 由解码器
+  /// 直接送显。`gpu-next-gl` / `gpu` 的 EGL 路径没有 HDR 输出能力，不能把
+  /// 窗口预切成 HDR，否则 SDR 画面会被系统当成 HDR 显示而发灰。
+  bool get supportsHdrOutput => this == gpuNext || this == mediacodecEmbed;
+
+  /// 是否能由 libplacebo 解析杜比视界 RPU（profile 5 的 IPTPQc2）。
+  ///
+  /// gpu-next / gpu-next-gl 都走 libplacebo，能正确还原 DoVi；传统 `gpu`
+  /// 没有 DoVi 映射，profile 5 只能回退 HDR10 或交给 Media3。
+  bool get supportsDolbyVision => isGpuNext;
 
   static HdrBackend fromValue(String? value) =>
       values.firstWhere((e) => e.value == value, orElse: () => gpuNext);
@@ -194,6 +265,8 @@ class HdrConfig {
     'tone-mapping': 'auto',
     'hdr-compute-peak': 'no',
     'target-colorspace-hint': 'no',
+    'target-prim': 'auto',
+    'target-trc': 'auto',
     'dither': 'no',
     'dither-depth': 'auto',
   };

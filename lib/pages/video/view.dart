@@ -2193,23 +2193,38 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     }
     // 预测性返回会把 Flutter 页面做 scale/translate，但 HDR 视频在独立的
     // 原生 SurfaceView 层上，不跟随动画，会提前露出后面的页面。返回手势
-    // 进行期间盖一层黑幕，让视频“淡出到黑”而不是消失。
+    // 进行期间只把视频矩形压黑，页面其余部分仍然可见。
     final route = ModalRoute.of(context);
+    // `ModalRoute` 本身不是 `Listenable`，不能直接丢给 AnimatedBuilder。
+    // Navigator 的 userGestureInProgressNotifier 才是预测性返回手势的
+    // 可监听源（Flutter 自己的 _ModalScope 也用它重建）。
+    final Listenable? gesture =
+        route?.navigator?.userGestureInProgressNotifier;
     return KeyedSubtree(
       key: _pageRootKey,
       child: AnimatedBuilder(
-        animation: (route as Listenable?) ?? kAlwaysDismissedAnimation,
-        builder: (context, _) => Stack(
-          children: [
-            HdrHolePunch(controller: playerController, child: page),
-            if (route?.popGestureInProgress ?? false)
-              const Positioned.fill(
-                child: IgnorePointer(
-                  child: ColoredBox(color: Colors.black),
+        animation: gesture ?? kAlwaysDismissedAnimation,
+        builder: (context, _) {
+          final backGesture = route?.popGestureInProgress ?? false;
+          return Stack(
+            children: [
+              // 黑幕放在 HdrHolePunch 之下：只盖住视频矩形，页面里的控制栏、
+              // 弹幕和评论仍然画在黑幕上方，不会跟着整页一起变黑。
+              if (backGesture)
+                Positioned.fill(
+                  child: HdrVideoBlackout(controller: playerController),
                 ),
+              // 返回手势期间把挖孔外的底色也改成透明，让下层页面正常透出；
+              // 平时仍保持不透明黑，避免透出窗口/下层页面。
+              HdrHolePunch(
+                controller: playerController,
+                backgroundColor:
+                    backGesture ? Colors.transparent : const Color(0xFF000000),
+                child: page,
               ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
