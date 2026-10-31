@@ -78,7 +78,7 @@ tasks.register("downloadLibmpv") {
         }
 
         def sums = [:]
-        sumsFile.eachLine("UTF-8") { line ->
+        sumsFile.getText("UTF-8").readLines().each { line ->
             def parts = line.trim().split(/\s+/)
             if (parts.length >= 2) {
                 sums[parts[parts.length - 1]] = parts[0]
