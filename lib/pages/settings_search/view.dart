@@ -34,13 +34,10 @@ class _SettingsSearchPageState
     ...extraSettings,
     ...dmSettings,
     ...replySettings,
-    ...dynSettings,
     ...privacySettings,
     ...recommendSettings,
     ...dynamicsSettings,
     ...videoSettings,
-    ...dmSettings,
-    ...replySettings,
     ...playSettings,
     ...styleSettings,
   ];

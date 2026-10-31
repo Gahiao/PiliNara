@@ -37,6 +37,7 @@ class VideoDetailData {
   List<Staff>? staff;
   String? redirectUrl;
   ListOrder listOrder = ListOrder.asc;
+  bool isPageReversed = false;
   List<Part>? originalPages;
 
   bool get hasSeason => ugcSeason != null;

@@ -627,6 +627,7 @@ class UgcIntroController extends CommonIntroController with ReloadMixin {
       );
     }
     if (isEnteringPip) return;
+    indexNotifier.dispose();
     super.onClose();
   }
 
@@ -637,7 +638,7 @@ class UgcIntroController extends CommonIntroController with ReloadMixin {
     if (videoDetail.ugcSeason != null) {
       return videoDetail
           .ugcSeason!
-          .sections![videoDetailCtr.seasonIndex.value]
+          .sections![sectionIndex]
           .listOrder
           .isShuffle;
     }
@@ -851,9 +852,4 @@ class UgcIntroController extends CommonIntroController with ReloadMixin {
     );
   }
 
-  @override
-  void onClose() {
-    indexNotifier.dispose();
-    super.onClose();
-  }
 }

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/button/toolbar_icon_button.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/text_field.dart';
@@ -39,9 +37,6 @@ class _ReplyPageState extends CommonRichTextPubPageState<LiveSendDmPanel> {
   @override
   void initState() {
     super.initState();
-    if (widget.fromEmote) {
-      updatePanelType(PanelType.emoji);
-    }
     liveRoomController.loadFansMedal();
   }
 
@@ -118,7 +113,7 @@ class _ReplyPageState extends CommonRichTextPubPageState<LiveSendDmPanel> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ...buildInputView(theme),
+              buildInputView(),
               Flexible(child: buildPanelContainer(Colors.transparent)),
             ],
           ),
@@ -149,30 +144,29 @@ class _ReplyPageState extends CommonRichTextPubPageState<LiveSendDmPanel> {
     ),
   );
 
-  List<Widget> buildInputView(ThemeData theme) {
-    return [
-      Padding(
-        padding: const EdgeInsets.only(
-          top: 12,
-          right: 15,
-          left: 15,
-          bottom: 10,
-        ),
-        child: Listener(
-          onPointerUp: (event) {
-            if (readOnly.value) {
-              updatePanelType(PanelType.keyboard);
-            }
-          },
-          child: Obx(
-            () => RichTextField(
+  Widget buildInputView() {
+    return Padding(
+      padding: const .only(left: 8, top: 2, right: 8),
+      child: Row(
+        children: [
+          Obx(() {
+            final isEmoji = panelType.value == .emoji;
+            return ToolbarIconButton(
+              tooltip: '表情',
+              selected: isEmoji,
+              icon: const Icon(Icons.emoji_emotions_outlined, size: 22),
+              onPressed: () => updatePanelType(isEmoji ? .keyboard : .emoji),
+            );
+          }),
+          const SizedBox(width: 2),
+          fansMedalBtn,
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichTextField(
               key: key,
+              textInputAction: .send,
               controller: editController,
-              minLines: 1,
-              maxLines: 2,
               autofocus: false,
-              readOnly: readOnly.value,
-              textInputAction: TextInputAction.send,
               onChanged: onChanged,
               onSubmitted: onSubmitted,
               focusNode: focusNode,
@@ -182,43 +176,35 @@ class _ReplyPageState extends CommonRichTextPubPageState<LiveSendDmPanel> {
                 hintStyle: TextStyle(fontSize: 14),
               ),
               style: theme.textTheme.bodyLarge,
-              // inputFormatters: [LengthLimitingTextInputFormatter(20)],
             ),
           ),
-        ),
-      ),
-      Divider(
-        height: 1,
-        color: theme.dividerColor.withValues(alpha: 0.1),
-      ),
-      Container(
-        height: 52,
-        padding: const .symmetric(horizontal: 12),
-        child: Row(
-          mainAxisAlignment: .spaceBetween,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                emojiBtn,
-                const SizedBox(width: 4),
-                fansMedalBtn,
-              ],
-            ),
-            Obx(
-              () => FilledButton.tonal(
-                onPressed: enablePublish.value ? onPublishThrottle : null,
-                style: FilledButton.styleFrom(
-                  visualDensity: .compact,
-                  padding: const .symmetric(horizontal: 20, vertical: 10),
-                ),
-                child: const Text('发送'),
+          Obx(
+            () => enablePublish.value
+                ? ToolbarIconButton(
+                    tooltip: '清空',
+                    selected: false,
+                    icon: const Icon(Icons.clear, size: 22),
+                    onPressed: () {
+                      editController.clear();
+                      enablePublish.value = false;
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ),
+          const SizedBox(width: 4),
+          Obx(
+            () => FilledButton.tonal(
+              onPressed: enablePublish.value ? onPublishThrottle : null,
+              style: FilledButton.styleFrom(
+                visualDensity: .compact,
+                padding: const .symmetric(horizontal: 16, vertical: 8),
               ),
+              child: const Text('发送'),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    ];
+    );
   }
 
   @override

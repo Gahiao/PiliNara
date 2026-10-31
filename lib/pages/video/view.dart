@@ -23,6 +23,8 @@ import 'package:PiliPlus/models/common/episode_panel_type.dart';
 import 'package:PiliPlus/models/common/list_order.dart';
 import 'package:PiliPlus/models/common/pgc_episode_type.dart';
 import 'package:PiliPlus/models_new/pgc/pgc_info_model/result.dart';
+import 'package:PiliPlus/models_new/video/video_detail/episode.dart'
+    show BaseEpisodeItem;
 import 'package:PiliPlus/models_new/video/video_tag/data.dart';
 import 'package:PiliPlus/pages/ai_chat/controller.dart';
 import 'package:PiliPlus/pages/ai_chat/view.dart';
@@ -216,7 +218,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   Future<bool> _switchPortraitFeed(PortraitFeedItem item) async {
     PortraitFeedService.instance.markCursor(item);
     return ugcIntroController.onChangeEpisode(
-      ugc.BaseEpisodeItem(
+      BaseEpisodeItem(
         aid: item.aid,
         bvid: item.bvid,
         cid: item.cid,
@@ -2254,7 +2256,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
 
   /// 播放列表 tab 的滚动目标：EpisodePanel 当前子列表
   ScrollController? _seasonScrollCtr() =>
-      seasonEpisodeKey.currentState?.activeScrollController;
+      seasonEpisodeKey.currentState?.scrollController;
 
   Widget buildTabBar({
     bool needIndicator = true,

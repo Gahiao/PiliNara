@@ -87,9 +87,8 @@ class EpisodePanelState extends State<EpisodePanel>
   late PgcInfoModel _pgcItem;
   late final _pgcController = _introController as PgcIntroController;
 
-  /// 当前激活子列表的滚动控制器（供视频页键盘滚动播放列表使用）
-  ScrollController get activeScrollController =>
-      _itemScrollController[_currentTabIndex.value];
+  /// 供视频页键盘滚动播放列表使用
+  ScrollController get scrollController => _scrollController;
 
   // fav
   late final int _seasonId;

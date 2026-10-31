@@ -8,6 +8,7 @@ class SectionItem {
   int? type;
   List<EpisodeItem>? episodes;
   ListOrder listOrder = ListOrder.asc;
+  bool isReversed = false;
   List<EpisodeItem>? originalEpisodes;
 
   SectionItem({this.seasonId, this.id, this.title, this.type, this.episodes});
