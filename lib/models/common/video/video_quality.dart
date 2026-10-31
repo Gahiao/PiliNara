@@ -1,28 +1,12 @@
-import 'package:PiliPlus/models/video/play/url.dart' show FormatItem;
+part of 'base_quality.dart';
 
-final class VideoQuality {
-  final int code;
-  final String desc;
+final class VideoQuality extends BaseQuality {
   final String shortDesc;
 
-  const VideoQuality(this.code, this.desc, this.shortDesc);
+  const VideoQuality(super.code, super.desc, this.shortDesc);
 
   @override
-  String toString() => 'code: $code, desc: $desc, shortDesc: $shortDesc';
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) {
-      return true;
-    }
-    if (other is VideoQuality) {
-      return code == other.code;
-    }
-    return false;
-  }
-
-  @override
-  int get hashCode => code.hashCode;
+  String toString() => '${super.toString()}, shortDesc: $shortDesc';
 
   /// 该画质是否为 HDR 类片源（HDR / 杜比视界 / HDR Vivid）。
   bool get isHdr =>
@@ -62,8 +46,7 @@ final class VideoQuality {
 
   static final _codeMap = {for (final i in values) i.code: i};
 
-  factory VideoQuality.fromId(int id, String idStr) =>
-      VideoQuality(id, idStr, idStr);
+  VideoQuality.fromId(super.id, super.idStr) : shortDesc = idStr;
 
   factory VideoQuality.fromCode(int code) =>
       _codeMap[code] ?? .fromId(code, code.toString());
@@ -74,13 +57,11 @@ final class VideoQuality {
     if (formats != null && formats.isNotEmpty) {
       for (final format in formats) {
         if (format.quality == code) {
-          try {
-            return VideoQuality(
-              code,
-              format.newDesc!,
-              format.displayDesc!,
-            );
-          } catch (_) {}
+          return VideoQuality(
+            code,
+            format.newDesc ?? format.displayDesc ?? code.toString(),
+            format.displayDesc ?? format.newDesc ?? code.toString(),
+          );
         }
       }
     }

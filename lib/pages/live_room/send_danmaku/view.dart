@@ -5,7 +5,6 @@ import 'package:PiliPlus/common/widgets/button/toolbar_icon_button.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/text_field.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/http/live.dart';
-import 'package:PiliPlus/models/common/publish_panel_type.dart';
 import 'package:PiliPlus/pages/common/publish/common_rich_text_pub_page.dart';
 import 'package:PiliPlus/pages/live_emote/controller.dart';
 import 'package:PiliPlus/pages/live_emote/view.dart';
@@ -19,15 +18,14 @@ import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart' hide TextField;
 
 class LiveSendDmPanel extends CommonRichTextPubPage {
-  final bool fromEmote;
   final LiveRoomController liveRoomController;
 
   const LiveSendDmPanel({
     super.key,
     super.items,
     super.onSave,
-    super.autofocus = true,
-    this.fromEmote = false,
+    super.autofocus,
+    super.panelType,
     required this.liveRoomController,
   });
 
@@ -183,6 +181,8 @@ class _ReplyPageState extends CommonRichTextPubPageState<LiveSendDmPanel> {
                 border: InputBorder.none,
                 hintStyle: TextStyle(fontSize: 14),
               ),
+              style: theme.textTheme.bodyLarge,
+              // inputFormatters: [LengthLimitingTextInputFormatter(20)],
             ),
           ),
         ),

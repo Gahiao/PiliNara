@@ -32,6 +32,9 @@ class _SettingsSearchPageState
   final RxList<SettingsModel> _list = <SettingsModel>[].obs;
   late final _settings = [
     ...extraSettings,
+    ...dmSettings,
+    ...replySettings,
+    ...dynSettings,
     ...privacySettings,
     ...recommendSettings,
     ...dynamicsSettings,

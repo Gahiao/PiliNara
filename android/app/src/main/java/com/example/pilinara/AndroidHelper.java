@@ -1,5 +1,7 @@
 package com.example.pilinara;
 
+import static com.example.piliplus.MediaHelper.getRemoteAction;
+
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.PendingIntent;
@@ -331,6 +333,10 @@ public final class AndroidHelper {
         } catch (Exception e) {
             return e.toString();
         }
+    }
+
+    public static String manufacturer() {
+        return Build.MANUFACTURER;
     }
 
     public static final class ToDart {
