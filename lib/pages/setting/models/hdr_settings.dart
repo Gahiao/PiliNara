@@ -148,7 +148,6 @@ Future<void> _showHdrBackendDialog(
     await GStorage.setting.put(SettingBoxKey.hdrBackend, res);
     // 用户主动切换后端时允许重新尝试 Vulkan；失败后仍会自动回退。
     PlPlayerController.resetVulkanFallback();
-    SmartDialog.showToast('重新打开视频后生效');
     setState();
   }
 }
