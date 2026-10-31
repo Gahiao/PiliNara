@@ -440,17 +440,28 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   Future<void> setBrightness(double value) async {
     _brightnessValue.value = value;
-    try {
-      if (Platform.isIOS || plPlayerController.setSystemBrightness) {
+    var applied = false;
+    if (Platform.isIOS || plPlayerController.setSystemBrightness) {
+      try {
         await ScreenBrightnessPlatform.instance.setSystemScreenBrightness(
           value,
         );
-      } else {
+        applied = true;
+      } catch (e) {
+        // “调节系统亮度”需要 WRITE_SETTINGS 授权；未授权时静默失败会让
+        // 用户以为亮度手势坏了，这里回退到应用窗口亮度。
+        debugPrint('setSystemScreenBrightness failed: $e');
+      }
+    }
+    if (!applied) {
+      try {
         await ScreenBrightnessPlatform.instance.setApplicationScreenBrightness(
           value,
         );
+      } catch (e) {
+        debugPrint('setApplicationScreenBrightness failed: $e');
       }
-    } catch (_) {}
+    }
     _brightnessIndicator.value = true;
     _brightnessTimer?.cancel();
     _brightnessTimer = Timer(const Duration(milliseconds: 200), () {
