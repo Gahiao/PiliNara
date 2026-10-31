@@ -63,23 +63,65 @@ def openUrl = { String url ->
     connection
 }
 
+// Java 的证书链在本机可能不完整（常见于代理/杀软中间人证书），表现为
+// PKIX path building failed。系统 curl 走 Windows/macOS/Linux 的证书库，
+// 通常不受影响，因此 Java 失败时自动用它兜底。
+def curlDownload = { String url, File dest ->
+    def part = new File(dest.parentFile, dest.name + '.part')
+    if (part.exists()) {
+        part.delete()
+    }
+    def process
+    try {
+        process = new ProcessBuilder(
+            'curl', '--fail', '--location', '--silent', '--show-error',
+            '--retry', '3', '--retry-delay', '1', '--connect-timeout', '20',
+            '--output', part.absolutePath, url
+        ).redirectErrorStream(true).start()
+    } catch (IOException e) {
+        throw new GradleException("系统没有可用的 curl：${e.message}")
+    }
+    def output = process.inputStream.getText('UTF-8')
+    def code = process.waitFor()
+    if (code != 0 || !part.exists() || part.length() == 0) {
+        part.delete()
+        throw new GradleException("curl 下载失败 exit=${code}: ${output.trim()}")
+    }
+    java.nio.file.Files.move(
+        part.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING
+    )
+}
+
 // 不能直接对 URLConnection 调 Groovy 的 withInputStream（Gradle 的
 // HttpsURLConnectionImpl 没有这个动态方法），先取 inputStream 再拷贝。
 def download = { String url, File dest ->
-    def connection = openUrl(url)
     try {
-        def code = connection.responseCode
-        if (code != 200) {
-            throw new GradleException("下载失败 HTTP ${code}: ${url}")
-        }
-        def input = connection.inputStream
+        def connection = openUrl(url)
         try {
-            dest.withOutputStream { out -> out << input }
+            def code = connection.responseCode
+            if (code != 200) {
+                throw new GradleException("下载失败 HTTP ${code}: ${url}")
+            }
+            def input = connection.inputStream
+            try {
+                dest.withOutputStream { out -> out << input }
+            } finally {
+                input.close()
+            }
         } finally {
-            input.close()
+            connection.disconnect()
         }
-    } finally {
-        connection.disconnect()
+    } catch (Throwable javaError) {
+        dest.delete()
+        println "Java 下载失败（${javaError.class.simpleName}），改用系统 curl：${url}"
+        try {
+            curlDownload(url, dest)
+        } catch (Throwable curlError) {
+            throw new GradleException(
+                "下载失败：${url}\nJava: ${javaError.message}\ncurl: ${curlError.message}",
+                curlError
+            )
+        }
     }
 }
 
@@ -89,11 +131,22 @@ tasks.register("downloadLibmpv") {
         outputDir.deleteDir()
         outputDir.mkdirs()
 
+        // 可选离线目录：把 SHA256SUMS 和三个 jar 放进来即可跳过网络。
+        // 适合 Java 证书链损坏或 GitHub 下载过慢的环境。
+        def localDir = file("$projectDir/libs/libmpv-local")
+        def localSumsFile = new File(localDir, "SHA256SUMS")
+        def useLocal = localSumsFile.exists() &&
+            libmpvAbis.every { abi -> new File(localDir, "default-${abi}.jar").exists() }
+
         def cacheDir = file("$buildDir/libmpv-latest")
         cacheDir.mkdirs()
 
-        def sumsFile = file("$cacheDir/SHA256SUMS")
-        download("${libmpvBaseUrl}/SHA256SUMS", sumsFile)
+        def sumsFile = useLocal ? localSumsFile : file("${cacheDir}/SHA256SUMS")
+        if (useLocal) {
+            println "Using local libmpv jars from ${localDir}"
+        } else {
+            download("${libmpvBaseUrl}/SHA256SUMS", sumsFile)
+        }
 
         def sums = [:]
         sumsFile.getText("UTF-8").readLines().each { line ->
@@ -105,12 +158,12 @@ tasks.register("downloadLibmpv") {
 
         libmpvAbis.each { abi ->
             def name = "default-${abi}.jar"
-            def dest = file("${cacheDir}/${name}")
+            def dest = useLocal ? new File(localDir, name) : file("${cacheDir}/${name}")
             def expected = sums[name]
             if (expected == null) {
                 throw new GradleException("SHA256SUMS 中缺少 ${name}，请先运行 libmpv fork 的 Build workflow")
             }
-            if (!dest.exists() || sha256(dest) != expected) {
+            if (!useLocal && (!dest.exists() || sha256(dest) != expected)) {
                 println "Downloading ${name} from ${libmpvBaseUrl}"
                 dest.delete()
                 download("${libmpvBaseUrl}/${name}", dest)
