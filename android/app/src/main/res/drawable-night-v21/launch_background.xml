@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <bitmap android:gravity="fill" android:src="@drawable/background"/>
-    </item>
+    <!-- 启动页底色固定黑色，避免浅色主题下先闪一帧白屏。 -->
+    <item android:drawable="@color/app_window_background" />
     <item>
         <bitmap android:gravity="center" android:src="@drawable/splash"/>
     </item>
