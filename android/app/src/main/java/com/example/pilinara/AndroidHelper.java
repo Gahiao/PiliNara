@@ -1,7 +1,5 @@
 package com.example.pilinara;
 
-import static com.example.piliplus.MediaHelper.getRemoteAction;
-
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.PendingIntent;
