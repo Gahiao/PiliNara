@@ -1629,8 +1629,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
             // 只给 hint 时，部分 Vulkan 驱动仍会挑 SDR 交换链；显式声明
             // BT.2020 + PQ 目标，libplacebo 才会按 HDR10 渲染并申请
             // 10bit/HDR swapchain。SDR 片源不会走这条原生路径。
-            properties['target-prim'] = 'bt.2020';
-            properties['target-trc'] = 'pq';
+            // Android Vulkan 交换链的 HDR 元数据由系统/驱动决定，
+            // 强行声明 bt.2020/pq 会让 swapchain 与解码器输出二次转换，
+            // 表现为偏色；交给 libplacebo 按片源自动选择。
+            properties['target-prim'] = 'auto';
+            properties['target-trc'] = 'auto';
           } else {
             // OpenGL/EGL 的 Android 后端没有 HDR 交换链，必须让
             // libplacebo tone map 回 SDR；请求 HDR hint 会输出错误颜色。
