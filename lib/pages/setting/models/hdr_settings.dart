@@ -75,7 +75,7 @@ List<SettingsModel> get hdrSettings => [
     leading: const Icon(Icons.memory_outlined),
     getSubtitle: () {
       final mode = HdrHwdecMode.fromValue(Pref.hdrHwdecMode);
-      return '当前：${mode.label}。${mode.desc}（切换画质生效）';
+      return '当前：${mode.label}。${mode.desc}';
     },
     onTap: _showHdrHwdecDialog,
   ),
@@ -112,7 +112,7 @@ List<SettingsModel> get hdrSettings => [
     subtitle:
         '用 ExoPlayer/MediaCodec 解码 profile 5，作为 mediacodec_embed / gpu 的兜底；'
         '选择 gpu-next 时优先由 libplacebo 出画，本开关不生效。'
-        '音频仍由 mpv 播放，视频位置会与 mpv 同步。可能有音画不同步，需重新打开视频生效',
+        '音频仍由 mpv 播放，视频位置会与 mpv 同步。可能有音画不同步',
     leading: const Icon(Icons.movie_filter_outlined),
     setKey: SettingBoxKey.media3Dovi,
     defaultVal: false,
