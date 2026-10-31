@@ -643,6 +643,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   bool _doviDisposed = false;
   // 每次换源/换集递增，用来丢弃上一集尚未完成的 doviPrepare 回调。
   int _doviGeneration = 0;
+  // 当前复用的 mpv 播放器是否已按 Media3 DoVi 模式关闭视频轨/音频轨。
+  bool _playerUsesMedia3Dovi = false;
 
   /// 是否应该走「视频在 Flutter 之下」的 SurfaceView 出画。
   ///
@@ -2127,6 +2129,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
     // Media3 DoVi：mpv 只负责音频，视频交给原生 ExoPlayer；必须在此之前
     // 关闭 mpv 的视频轨，避免两个解码器抢同一个 Surface。
+    _playerUsesMedia3Dovi = _useMedia3Dovi;
     if (_useMedia3Dovi) {
       player.setProperty('vid', 'no');
       player.setProperty('aid', 'no');
@@ -2271,10 +2274,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (isAnim && superResolutionType.value != .disable) {
         await setShader();
       }
-    } else {
+    } else if (_useMedia3Dovi != _playerUsesMedia3Dovi) {
       // 复用播放器换集时，出画方式可能在 Media3 DoVi 与 mpv 原生出画之间
       // 切换（例如 DoVi 分P → HDR10 分P）。track 选择和 vo 必须跟着改，
       // 否则会沿用上一集的 vid=no / vo=null，表现为有音频无画面或定格。
+      _playerUsesMedia3Dovi = _useMedia3Dovi;
       if (_useMedia3Dovi) {
         // 让下一次 _applyNativeSurface 重新下发 vo/wid。
         _appliedWid = null;
@@ -2283,9 +2287,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         player.setProperty('vid', 'no');
         player.setProperty('aid', 'no');
         player.setProperty('vo', 'null');
-      } else if (nativeSurfaceMode.value) {
+      } else {
         player.setProperty('aid', 'auto');
-        _applyNativeSurface(target: player);
+        if (nativeSurfaceMode.value) {
+          _applyNativeSurface(target: player);
+        }
       }
     }
 
