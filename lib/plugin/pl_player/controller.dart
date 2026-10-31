@@ -1701,7 +1701,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     } catch (_) {}
   }
 
-  void _resetNativeSurfaceState() {
+  /// [keepSurface] 为 true 时保留已经挂上的原生 SurfaceView（owner/wid/尺寸），
+  /// 只清掉属于旧播放器的 applied 状态。
+  ///
+  /// `_initPlayer` 不能无条件清掉 wid：NativeVideoSurface 可能已经先完成
+  /// `create` 并把 surfaceCreated 回调送到 Dart，而 Flutter 侧组件不会再次
+  /// 触发 create，wid 被清空后就再也挂不回去，表现为随机黑屏。
+  void _resetNativeSurfaceState({bool keepSurface = false}) {
     _nativeDetachTimer?.cancel();
     _nativeDetachTimer = null;
     _nativeResizeTimer?.cancel();
@@ -1710,9 +1716,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _nativeProbeTimer = null;
     _vulkanCheckTimer?.cancel();
     _vulkanCheckTimer = null;
-    _nativeOwner = null;
-    _nativeWid = null;
-    _nativeSurfaceSize = null;
+    if (!keepSurface) {
+      _nativeOwner = null;
+      _nativeWid = null;
+      _nativeSurfaceSize = null;
+    }
     _appliedWid = null;
     _appliedVo = null;
     _appliedBackend = null;
@@ -2110,7 +2118,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // 的画面；漏掉这一项会让 nativeSurfaceMode=false，原生 Surface 不创建，
     // Media3 拿不到 surface，表现为整屏黑屏/卡住。
     nativeSurfaceMode.value = _wantNativeSurface || _useMedia3Dovi;
-    _resetNativeSurfaceState();
+    // 保留可能已经挂上的原生 SurfaceView：NativeVideoSurface 只在首次
+    // create 时上报 surfaceCreated，清掉 wid 后不会再收到第二次回调。
+    _resetNativeSurfaceState(keepSurface: true);
     _nativeSurfaceReady = nativeSurfaceMode.value ? Completer<void>() : null;
     debugPrint(
       '[HDR] init: enable=${Pref.enableHdr} direct=${Pref.hdrSurface} '
