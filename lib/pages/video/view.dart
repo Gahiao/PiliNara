@@ -2198,7 +2198,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     return KeyedSubtree(
       key: _pageRootKey,
       child: AnimatedBuilder(
-        animation: route ?? kAlwaysDismissedAnimation,
+        animation: (route as Listenable?) ?? kAlwaysDismissedAnimation,
         builder: (context, _) => Stack(
           children: [
             HdrHolePunch(controller: playerController, child: page),
