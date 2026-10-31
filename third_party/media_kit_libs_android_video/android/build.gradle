@@ -1,0 +1,116 @@
+import java.nio.file.Files
+import java.security.MessageDigest
+
+group 'com.alexmercerind.media_kit_libs_android_video'
+version '1.0'
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    // Conditional for compatibility with AGP <4.2.
+    if (project.android.hasProperty("namespace")) {
+        namespace 'com.alexmercerind.media_kit_libs_android_video'
+    }
+
+    compileSdkVersion 36
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        minSdkVersion 16
+    }
+
+    dependencies {
+        implementation fileTree(dir: "$buildDir/output", include: "*.jar")
+    }
+}
+
+// PiliNara 使用 Gahiao/libmpv-android-video-build 的滚动 release：
+// 每次 fork 的 Actions 构建都会更新 libmpv-latest，App 构建时自动拉最新 jar。
+// 不再优先使用 android/libs 下的本地 jar，避免工作区残留旧库导致「以为更新了其实没更新」。
+def libmpvBaseUrl = "https://github.com/Gahiao/libmpv-android-video-build/releases/latest/download"
+def libmpvAbis = ["arm64-v8a", "armeabi-v7a", "x86_64"]
+
+def sha256 = { File file ->
+    MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file.toPath())).encodeHex().toString()
+}
+
+def openUrl = { String url ->
+    def connection = new URL(url).openConnection()
+    connection.connectTimeout = 15000
+    connection.readTimeout = 120000
+    connection
+}
+
+tasks.register("downloadLibmpv") {
+    doLast {
+        def outputDir = file("$buildDir/output")
+        outputDir.deleteDir()
+        outputDir.mkdirs()
+
+        def cacheDir = file("$buildDir/libmpv-latest")
+        cacheDir.mkdirs()
+
+        def sumsFile = file("$cacheDir/SHA256SUMS")
+        openUrl("${libmpvBaseUrl}/SHA256SUMS").withInputStream { input ->
+            sumsFile.withOutputStream { out -> out << input }
+        }
+
+        def sums = [:]
+        sumsFile.eachLine("UTF-8") { line ->
+            def parts = line.trim().split(/\s+/)
+            if (parts.length >= 2) {
+                sums[parts[parts.length - 1]] = parts[0]
+            }
+        }
+
+        libmpvAbis.each { abi ->
+            def name = "default-${abi}.jar"
+            def dest = file("${cacheDir}/${name}")
+            def expected = sums[name]
+            if (expected == null) {
+                throw new GradleException("SHA256SUMS 中缺少 ${name}，请先运行 libmpv fork 的 Build workflow")
+            }
+            if (!dest.exists() || sha256(dest) != expected) {
+                println "Downloading ${name} from ${libmpvBaseUrl}"
+                dest.delete()
+                openUrl("${libmpvBaseUrl}/${name}").withInputStream { input ->
+                    dest.withOutputStream { out -> out << input }
+                }
+            }
+            def actual = sha256(dest)
+            if (actual != expected) {
+                throw new GradleException("SHA-256 校验失败: ${name}")
+            }
+            project.copy {
+                from dest
+                into outputDir
+            }
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("downloadLibmpv")
+}

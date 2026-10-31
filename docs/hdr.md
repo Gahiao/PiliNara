@@ -148,6 +148,12 @@ target-colorspace-hint=yes
 `LIBPLACEBO_VULKAN`，并且 **libplacebo 必须带 SPIR-V 编译器 shaderc**）。
 `ra_ctx_vulkan_android`（`gpu-context=androidvk`）是 fork 新增的 Android Vulkan 上下文。
 
+PiliNara 不再手工替换 jar：`third_party/media_kit_libs_android_video` 的
+`downloadLibmpv` 任务会在每次 Android 构建时从 fork 的 `libmpv-latest` release
+下载各 ABI 的 `default-*.jar` 与 `SHA256SUMS`，校验后放进 `build/output`。
+因此 fork 的 Build workflow 每跑一次，App 下次构建就会自动用上最新库；首次使用
+必须先手动跑一次该 workflow，生成 `libmpv-latest`。
+
 > **没有 shaderc 会直接黑屏**：libplacebo 的 Vulkan 后端要用 shaderc/glslang 编译
 > GLSL。只开 `-Dvulkan=enabled` 而没有 `-Dshaderc=enabled` 时，mpv 日志会出现
 > `Failed initializing any SPIR-V compiler! Maybe libplacebo was built without support
