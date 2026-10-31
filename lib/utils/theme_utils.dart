@@ -181,7 +181,9 @@ abstract final class ThemeUtils {
       ),
       pageTransitionsTheme: PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: const ZoomPageTransitionsBuilder(),
+          TargetPlatform.android: Pref.enablePredictiveBack
+              ? const PredictiveBackPageTransitionsBuilder()
+              : const ZoomPageTransitionsBuilder(),
         },
       ),
     );

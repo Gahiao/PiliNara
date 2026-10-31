@@ -2188,11 +2188,29 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         : child;
     // 页面根参照系：归位目标矩形以此量取（规避路由转场期间的整页偏移）
     final playerController = plPlayerController;
+    if (playerController == null) {
+      return KeyedSubtree(key: _pageRootKey, child: page);
+    }
+    // 预测性返回会把 Flutter 页面做 scale/translate，但 HDR 视频在独立的
+    // 原生 SurfaceView 层上，不跟随动画，会提前露出后面的页面。返回手势
+    // 进行期间盖一层黑幕，让视频“淡出到黑”而不是消失。
+    final route = ModalRoute.of(context);
     return KeyedSubtree(
       key: _pageRootKey,
-      child: playerController == null
-          ? page
-          : HdrHolePunch(controller: playerController, child: page),
+      child: AnimatedBuilder(
+        animation: route ?? kAlwaysDismissedAnimation,
+        builder: (context, _) => Stack(
+          children: [
+            HdrHolePunch(controller: playerController, child: page),
+            if (route?.popGestureInProgress ?? false)
+              const Positioned.fill(
+                child: IgnorePointer(
+                  child: ColoredBox(color: Colors.black),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
