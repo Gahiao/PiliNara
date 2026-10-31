@@ -266,7 +266,6 @@ Future<void> _showHdrHwdecDialog(
   );
   if (res != null) {
     await GStorage.setting.put(SettingBoxKey.hdrHwdecMode, res);
-    SmartDialog.showToast('切换画质后生效');
     setState();
   }
 }
