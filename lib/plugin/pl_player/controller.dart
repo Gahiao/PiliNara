@@ -591,8 +591,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 当前片源是否为 HDR / 杜比视界流，由播放页在 setDataSource 前写入。
   bool isHdrSource = false;
 
-  /// 当前片源是否为杜比视界（画质 126）。杜比视界不要预切 HDR 窗口模式，
-  /// 否则会覆盖掉系统/面板的杜比视界处理，导致颜色异常。
+  /// 当前片源是否为杜比视界（画质 126）。
+  ///
+  /// `mediacodec_embed` / Media3 路径不预切窗口 HDR（杜比由解码器/ExoPlayer
+  /// 自行处理）；改走 gpu-next 后由 Vulkan 交换链输出，需要和普通 HDR 一样
+  /// 预切窗口 HDR，否则 libplacebo 会按 SDR 合成。
   bool isDolbyVisionSource = false;
 
   /// 当前片源是否为 HDR Vivid；同样不预切 HDR 窗口模式。
@@ -1114,6 +1117,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
 
     final native = nativeSurfaceMode.value;
+    final doviLabel = !isDolbyVisionSource
+        ? '否'
+        : '是（${isDolbyVisionProfile5 ? 'profile 5' : 'profile 8'}）';
     return [
       '出画路径: ${native ? 'SurfaceView(HDR)' : 'Texture(8bit)'}',
       if (_useMedia3Dovi) '真 DoVi 解码: Media3 / ExoPlayer（视频），mpv 音频',
@@ -1133,6 +1139,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
             '页面尺寸: ${_sizeLabel(nativePageSize.value)}',
       'vo: ${read('vo')}',
       'vo-configured: ${read('vo-configured')}',
+      'gpu-api: ${read('gpu-api')} / gpu-context: ${read('gpu-context')}',
       'hwdec-current: ${read('hwdec-current')}',
       '视频色彩: ${read('video-params/primaries')} / ${read('video-params/gamma')}',
       '像素格式: ${read('video-params/pixelformat')}',
@@ -1143,10 +1150,14 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       'hdr-compute-peak: ${read('hdr-compute-peak')}',
       'target-peak: ${read('target-peak')}',
       'target-colorspace-hint: ${read('target-colorspace-hint')}',
+      'target-prim/target-trc: ${read('target-prim')} / ${read('target-trc')}',
+      '窗口 HDR 预切: ${_windowHdrRequested ? '是' : '否'}',
+      '杜比视界: $doviLabel',
       'dither: ${read('dither')}',
       'HDR 开关: ${Pref.enableHdr ? '开' : '关'}，'
           '直通出画: ${Pref.hdrSurface ? '开' : '关'}，'
-          '后端: ${Pref.hdrBackend}',
+          '后端: ${HdrBackend.fromValue(Pref.hdrBackend).label}'
+          ' (${HdrBackend.fromValue(Pref.hdrBackend).gpuApi ?? '-'})',
       '片源判定: ${isHdrSource ? (isDolbyVisionSource ? 'HDR / 杜比视界' : (isHdrVividSource ? 'HDR Vivid' : 'HDR')) : 'SDR'}',
       if (sourceCodecs != null) '片源 codecs: $sourceCodecs',
     ].join('\n');
@@ -1189,6 +1200,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   int? _appliedWid;
   String? _appliedVo;
+  HdrBackend? _appliedBackend;
   (int, int)? _appliedSurfaceSize;
 
   /// 布局尺寸变化的防抖更新（小窗拖动/页面动画期间尺寸逐帧变化）。
@@ -1313,20 +1325,25 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 在 setDataSource 开始、播放器与首帧出现之前切换，让面板的 HDR 模式
   /// 切换发生在加载/黑屏阶段，而不是首帧出声时整屏亮一下。
   void _updateWindowHdrMode() {
-    // 只有 mediacodec_embed 真正由系统/解码器直通 HDR；gpu/gpu-next 在本
-    // libmpv 构建上实际输出 SDR，不应把窗口预切成 HDR。
-    // 杜比视界/HDR Vivid 也不预切，让系统按片源元数据切到正确显示模式。
+    // 只有 mediacodec_embed 和 gpu-next(Vulkan) 有真正的 HDR 输出路径：
+    // 前者由解码器直通，后者通过 Vulkan 交换链协商 HDR 色彩空间。
+    // gpu-next-gl / gpu 的 EGL 路径实际输出 SDR，不能预切窗口 HDR。
+    // 杜比视界走 gpu-next 时同样需要 HDR 窗口，否则 Vulkan 交换链没有
+    // HDR dataspace；Media3 路径由 ExoPlayer 自己设置，HDR Vivid 交给系统。
     final backend = HdrBackend.fromValue(Pref.hdrBackend);
-    // mediacodec_embed 由解码器直通；gpu-next 现在显式请求
-    // target-colorspace-hint + 10bit FBO，也需要窗口进入 HDR 模式。
+    final doviViaGpuNext =
+        isDolbyVisionSource && backend.isGpuNext && !_useMedia3Dovi;
     final wanted =
         _wantNativeSurface &&
-        (backend == HdrBackend.mediacodecEmbed ||
-            backend == HdrBackend.gpuNext) &&
-        !isDolbyVisionSource &&
+        backend.supportsHdrOutput &&
+        (!isDolbyVisionSource || doviViaGpuNext) &&
         !isHdrVividSource;
     if (wanted == _windowHdrRequested) return;
     _windowHdrRequested = wanted;
+    debugPrint(
+      '[HDR] window color mode=$wanted backend=${backend.value} '
+      'hdr=$isHdrSource dovi=$isDolbyVisionSource media3=$_useMedia3Dovi',
+    );
     unawaited(NativeVideoSurfaceChannel.setWindowHdr(enabled: wanted));
   }
 
@@ -1474,6 +1491,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       _nativeWid = null;
       _appliedWid = null;
       _appliedVo = null;
+      _appliedBackend = null;
       _appliedSurfaceSize = null;
       final player = ownerPlayer;
       if (player == null) return;
@@ -1492,22 +1510,34 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     final size = _nativeSurfaceSize;
     if (player == null || wid == null || size == null) return;
     if (size.$1 <= 1 || size.$2 <= 1) return;
-    final vo = Pref.hdrBackend;
-    final needVo = _appliedWid != wid || _appliedVo != vo;
+    final backend = HdrBackend.fromValue(Pref.hdrBackend);
+    final vo = backend.vo;
+    // gpu-next 与 gpu-next-gl 的 vo 都是 gpu-next，只有 gpu-api 不同；
+    // 只比较 vo 会导致切换后端后仍沿用旧的 Vulkan/OpenGL 上下文。
+    final needVo =
+        _appliedWid != wid || _appliedVo != vo || _appliedBackend != backend;
     try {
       if (_appliedSurfaceSize != size) {
         player.setProperty('android-surface-size', '${size.$1}x${size.$2}');
         _appliedSurfaceSize = size;
       }
       if (needVo) {
-        // 顺序很重要：先复位 vo，再给 wid，最后设置 vo。
+        // 顺序很重要：先复位 vo，再写 gpu-api/gpu-context 等初始化参数，
+        // 然后给 wid，最后才设置 vo。gpu-context 只能在 VO 创建前生效；
+        // media_kit 创建 VideoController 时会把 gpu-context 覆盖成 android，
+        // 所以这里必须在 vo=gpu-next 之前重新写回 androidvk。
         player.setProperty('vo', 'null');
+        _applyHdrProperties(player, hdrSurface: true);
         player.setProperty('wid', '$wid');
         player.setProperty('vid', 'auto');
         player.setProperty('vo', vo);
+        // target-prim/target-trc/target-colorspace-hint 属于 vo 选项，
+        // 部分 libmpv 构建在 vo=null 时写入会被忽略；VO 创建后、首帧前
+        // 再写一次，确保 libplacebo 按 HDR10 初始化交换链。
+        _applyHdrProperties(player, hdrSurface: true, reset: false);
         _appliedWid = wid;
         _appliedVo = vo;
-        _applyHdrProperties(player, hdrSurface: true);
+        _appliedBackend = backend;
       }
       debugPrint(
         [
@@ -1548,26 +1578,64 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 只改色彩处理相关的运行期属性，不在这里决定 `--vo`：
   /// * 纹理出画时 `--vo` 由 media_kit 的 Android 控制器负责；
   /// * SurfaceView 出画时由 [_applyNativeSurface] 在 `wid` 就绪后设置。
-  void _applyHdrProperties(Player player, {bool hdrSurface = false}) {
+  void _applyHdrProperties(
+    Player player, {
+    bool hdrSurface = false,
+    bool reset = true,
+  }) {
     try {
-      // 先复位再写入，确保关闭 HDR 后不会残留上一次的参数
-      for (final entry in HdrConfig.resetProperties.entries) {
-        player.setProperty(entry.key, entry.value);
+      // 先复位再写入，确保关闭 HDR 后不会残留上一次的参数。
+      // 逐个 try：某些 libmpv 构建可能不认识其中某个属性，不能让它中断
+      // 后续 HDR 参数（尤其是 gpu-api / gpu-context）的写入。
+      // VO 创建后的二次写入传 reset:false，避免把刚协商好的 HDR 交换链
+      // 又复位成 SDR。
+      if (reset) {
+        for (final entry in HdrConfig.resetProperties.entries) {
+          try {
+            player.setProperty(entry.key, entry.value);
+          } catch (e) {
+            debugPrint('[HDR] reset ${entry.key} failed: $e');
+          }
+        }
       }
       final properties = Map<String, String>.from(
         HdrConfig.fromPref().mpvProperties,
       );
       if (hdrSurface) {
         final backend = HdrBackend.fromValue(Pref.hdrBackend);
-        if (backend == HdrBackend.gpuNext) {
-          // gpu-next（libplacebo）在 Android 走 OpenGL/EGL。显式声明
-          // gpu-api/gpu-context，并请求 10bit float FBO + colorspace hint，
-          // 才能把 HDR 直接交给 Surface，而不是先 tone map 成 SDR。
-          properties['gpu-api'] = 'opengl';
-          properties['gpu-context'] = 'android';
+        // 即使不是 gpu-next，也要显式写回 gpu-api/gpu-context：播放器内
+        // 切换后端时，上一次留下的 vulkan/androidvk 不能带到 gpu 路径。
+        if (backend.gpuApi != null) {
+          properties['gpu-api'] = backend.gpuApi!;
+          properties['gpu-context'] = backend.gpuContext!;
+        }
+        if (backend.isGpuNext) {
+          // gpu-next（libplacebo）显式声明 gpu-api/gpu-context：Vulkan 走
+          // androidvk（fork 里的 ra_ctx_vulkan_android），OpenGL 走 android。
+          // 同时请求 10bit 浮点 FBO + colorspace hint，让 libplacebo 直接
+          // 把 HDR 交给 Surface，而不是先 tone map 成 SDR。
           properties['gpu-dumb-mode'] = 'no';
-          properties['fbo-format'] = 'rgba16hf';
-          properties['target-colorspace-hint'] = 'yes';
+          // fbo-format 是 OpenGL 的选项；Vulkan 的交换链格式由
+          // libplacebo 根据 target-colorspace-hint 自行选择。
+          if (backend.gpuApi == 'opengl') {
+            properties['fbo-format'] = 'rgba16hf';
+          }
+          if (backend.gpuApi == 'vulkan') {
+            // Vulkan 交换链可以协商 HDR 色彩空间；strict 关闭，协商失败
+            // 时仍可回退 SDR，避免整屏发灰/黑屏。
+            properties['target-colorspace-hint'] = 'yes';
+            properties['target-colorspace-hint-mode'] = 'target';
+            properties['target-colorspace-hint-strict'] = 'no';
+            // 只给 hint 时，部分 Vulkan 驱动仍会挑 SDR 交换链；显式声明
+            // BT.2020 + PQ 目标，libplacebo 才会按 HDR10 渲染并申请
+            // 10bit/HDR swapchain。SDR 片源不会走这条原生路径。
+            properties['target-prim'] = 'bt.2020';
+            properties['target-trc'] = 'pq';
+          } else {
+            // OpenGL/EGL 的 Android 后端没有 HDR 交换链，必须让
+            // libplacebo tone map 回 SDR；请求 HDR hint 会输出错误颜色。
+            properties['target-colorspace-hint'] = 'no';
+          }
           properties['hdr-compute-peak'] = 'yes';
           properties['gamut-mapping-mode'] = 'auto';
           properties['dither-depth'] = 'auto';
@@ -1582,7 +1650,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       }
       debugPrint('[HDR] properties: $properties');
       for (final entry in properties.entries) {
-        player.setProperty(entry.key, entry.value);
+        // 逐个写入：某个属性在当前 libmpv 构建上不存在时，不能影响其余
+        // HDR 参数（尤其是 gpu-api/gpu-context）。
+        try {
+          player.setProperty(entry.key, entry.value);
+        } catch (e) {
+          debugPrint('[HDR] set ${entry.key} failed: $e');
+        }
       }
     } catch (_) {
       // 个别平台的 libmpv 构建不支持其中某些属性，忽略即可
@@ -1649,7 +1723,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       _processing = true;
       // 新片源前先释放旧的 Media3 DoVi 播放器。
       _releaseDoviPlayer();
-      _useMedia3Dovi = isDolbyVisionProfile5 && Pref.media3Dovi;
+      final backend = HdrBackend.fromValue(Pref.hdrBackend);
+      // gpu-next 的 libplacebo 能直接解析 DoVi RPU；此时让 mpv 出画，
+      // Media3 只作为 mediacodec_embed / 传统 gpu 的实验兜底。
+      _useMedia3Dovi =
+          isDolbyVisionProfile5 &&
+          Pref.media3Dovi &&
+          !backend.supportsDolbyVision;
       _doviVideoUrl = _useMedia3Dovi && dataSource is NetworkSource
           ? dataSource.videoSource
           : null;
@@ -1860,7 +1940,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     debugPrint(
       '[HDR] init: enable=${Pref.enableHdr} direct=${Pref.hdrSurface} '
       'hdrSource=$isHdrSource surface=${nativeSurfaceMode.value} '
-      'vo=${nativeSurfaceMode.value ? Pref.hdrBackend : '-'} hwdec=${_resolveHwdec()}',
+      'vo=${nativeSurfaceMode.value ? HdrBackend.fromValue(Pref.hdrBackend).vo : '-'} '
+      'gpu=${HdrBackend.fromValue(Pref.hdrBackend).gpuApi ?? '-'} hwdec=${_resolveHwdec()}',
     );
 
     final hwdec = _resolveHwdec();
@@ -1900,11 +1981,16 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         // HDR 片源的渲染后端可在设置里切换（mediacodec_embed / gpu-next / gpu），
         // 不同设备驱动对 10bit EGL 的支持差异很大。
         vo: nativeSurfaceMode.value && !_useMedia3Dovi
-            ? HdrBackend.fromValue(Pref.hdrBackend).value
+            ? HdrBackend.fromValue(Pref.hdrBackend).vo
             : null,
       ),
     );
     _setVideoController(videoController);
+
+    // media_kit 的 AndroidVideoController.create 会无条件写
+    // gpu-context=android，把上面 Vulkan 的 androidvk 覆盖掉。
+    // 在创建 VO 之前补写一次，否则 gpu-next 永远走 OpenGL。
+    _applyHdrProperties(player, hdrSurface: nativeSurfaceMode.value);
 
     if (Platform.isAndroid) {
       // Avoid sizing the surface using mpv's idle window between media loads.
