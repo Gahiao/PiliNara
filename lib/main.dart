@@ -277,7 +277,7 @@ class MyApp extends StatelessWidget {
     final ColorScheme lightScheme, darkScheme;
     if (dynamicColor) {
       lightScheme = _light!;
-      darkScheme = _dark!.liftedSurface;
+      darkScheme = _dark!;
     } else {
       final customColor = Pref.customColor;
       final brandColor =
@@ -286,7 +286,7 @@ class MyApp extends StatelessWidget {
       final variant = Pref.schemeVariant;
 
       lightScheme = brandColor.asColorSchemeSeed(variant, .light);
-      darkScheme = brandColor.asColorSchemeSeed(variant, .dark).liftedSurface;
+      darkScheme = brandColor.asColorSchemeSeed(variant, .dark);
     }
 
     return (

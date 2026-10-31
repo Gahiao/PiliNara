@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- 深色模式窗口底色：不用纯黑，避免与深色主题提亮后的 surface 不一致。 -->
-    <color name="app_window_background">#FF121212</color>
-</resources>

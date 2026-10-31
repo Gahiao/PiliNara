@@ -2,7 +2,4 @@
 <resources>
     <color name="ic_launcher_foreground">#FF5CB67B</color>
     <color name="ic_launcher_background">#FFFFFFFF</color>
-    <!-- 窗口底色：纯黑在启动/转场/最近任务里像一块死黑，
-         这里与 Flutter 主题的深色背景保持一致。 -->
-    <color name="app_window_background">#FFF7F7F9</color>
 </resources>

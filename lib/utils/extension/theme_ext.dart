@@ -25,25 +25,6 @@ extension ColorSchemeExt on ColorScheme {
   bool get isLight => brightness.isLight;
 
   bool get isDark => brightness.isDark;
-
-  /// 深色主题的 surface 系列整体提亮一档。
-  ///
-  /// 纯黑背景在 AMOLED 上会把卡片、分割线、次级面板全部压成同一片黑，
-  /// 层次完全消失；这里按比例向白混合，保留主题色相的同时保证不会出现
-  /// 纯黑（纯黑主题开关仍会在 `ThemeUtils.darkenTheme` 里显式覆盖）。
-  ColorScheme get liftedSurface {
-    Color lift(Color color) => Color.lerp(color, Colors.white, .07)!;
-    return copyWith(
-      surface: lift(surface),
-      surfaceDim: lift(surfaceDim),
-      surfaceBright: lift(surfaceBright),
-      surfaceContainerLowest: lift(surfaceContainerLowest),
-      surfaceContainerLow: lift(surfaceContainerLow),
-      surfaceContainer: lift(surfaceContainer),
-      surfaceContainerHigh: lift(surfaceContainerHigh),
-      surfaceContainerHighest: lift(surfaceContainerHighest),
-    );
-  }
 }
 
 extension ColorExtension on Color {
