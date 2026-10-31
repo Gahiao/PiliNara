@@ -1637,7 +1637,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
             properties['target-colorspace-hint'] = 'no';
           }
           properties['hdr-compute-peak'] = 'yes';
-          properties['gamut-mapping-mode'] = 'auto';
+          // auto 在部分 libplacebo 版本上会退化为 clip，高饱和场景
+          // 明显偏色；perceptual 对 BT.2020→显示色域的映射更稳定。
+          properties['gamut-mapping-mode'] = 'perceptual';
           properties['dither-depth'] = 'auto';
           properties['video-output-levels'] = 'auto';
         } else {
