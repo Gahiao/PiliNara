@@ -75,45 +75,40 @@ List<SettingsModel> get hdrSettings => [
     leading: const Icon(Icons.memory_outlined),
     getSubtitle: () {
       final mode = HdrHwdecMode.fromValue(Pref.hdrHwdecMode);
-      return '当前：${mode.label}。${mode.desc}（切换画质或重开视频生效）';
+      return '当前：${mode.label}。${mode.desc}（切换画质生效）';
     },
     onTap: _showHdrHwdecDialog,
   ),
-  SwitchModel(
+  const SwitchModel(
     title: 'HDR 直通出画',
     subtitle:
         'HDR / 杜比视界片源改用 Flutter 之下的 SurfaceView 出画：'
-        'MediaCodec 直通由解码器送显，gpu-next 则通过 Vulkan 交换链协商 HDR；'
-        'SDR 片源仍走纹理，弹幕/控制栏照常叠加。切换后需重新打开视频生效。'
-        '真 HDR 播放时部分设备会整屏切换到 HDR 显示模式（亮度跳变一次），属系统行为；'
-        '若出现黑屏或不想看到切换，请关闭此开关或开启「杜比视界兼容模式」后重开视频',
+        'MediaCodec 直通由解码器送显，gpu-next 则通过 Vulkan 交换链协商 HDR；',
     leading: const Icon(Icons.hdr_strong),
     setKey: SettingBoxKey.hdrSurface,
     defaultVal: true,
-    onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
   ),
   NormalModel(
     title: 'HDR 渲染后端',
     leading: const Icon(Icons.tune),
     getSubtitle: () {
       final backend = HdrBackend.fromValue(Pref.hdrBackend);
-      return '当前：${backend.label}。${backend.desc}（重新打开视频生效）';
+      return '当前：${backend.label}。${backend.desc}';
     },
     onTap: _showHdrBackendDialog,
   ),
-  SwitchModel(
+  const SwitchModel(
     title: '杜比视界兼容模式',
     subtitle:
         '仅对 profile 5 生效：mediacodec_embed / gpu 直通会把它当成 SDR 导致偏色，开启后若存在同分辨率 HDR10 片源则改用 HDR10；'
         'gpu-next 会直接解析 DoVi RPU，选择它时本开关不再回退。'
-        'profile 8 / 8.4 带 HDR10/HLG 基础层，始终保留杜比视界，不会回退',
+        '(似乎无效?)',
     leading: const Icon(Icons.brightness_high),
     setKey: SettingBoxKey.dolbyVisionFallback,
     defaultVal: true,
-    onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
   ),
-  SwitchModel(
-    title: 'profile 5 Media3 解码（真 DoVi，实验）',
+  const SwitchModel(
+    title: 'profile 5 Media3 解码（实验）',
     subtitle:
         '用 ExoPlayer/MediaCodec 解码 profile 5，作为 mediacodec_embed / gpu 的兜底；'
         '选择 gpu-next 时优先由 libplacebo 出画，本开关不生效。'
@@ -121,7 +116,6 @@ List<SettingsModel> get hdrSettings => [
     leading: const Icon(Icons.movie_filter_outlined),
     setKey: SettingBoxKey.media3Dovi,
     defaultVal: false,
-    onChanged: (_) => SmartDialog.showToast('重新打开视频后生效'),
   ),
   NormalModel(
     title: 'Media3 音画偏移',
@@ -272,7 +266,7 @@ Future<void> _showHdrHwdecDialog(
   );
   if (res != null) {
     await GStorage.setting.put(SettingBoxKey.hdrHwdecMode, res);
-    SmartDialog.showToast('切换画质或重新打开视频后生效');
+    SmartDialog.showToast('切换画质后生效');
     setState();
   }
 }
