@@ -1317,9 +1317,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // libmpv 构建上实际输出 SDR，不应把窗口预切成 HDR。
     // 杜比视界/HDR Vivid 也不预切，让系统按片源元数据切到正确显示模式。
     final backend = HdrBackend.fromValue(Pref.hdrBackend);
+    // mediacodec_embed 由解码器直通；gpu-next 现在显式请求
+    // target-colorspace-hint + 10bit FBO，也需要窗口进入 HDR 模式。
     final wanted =
         _wantNativeSurface &&
-        backend == HdrBackend.mediacodecEmbed &&
+        (backend == HdrBackend.mediacodecEmbed ||
+            backend == HdrBackend.gpuNext) &&
         !isDolbyVisionSource &&
         !isHdrVividSource;
     if (wanted == _windowHdrRequested) return;
@@ -1556,12 +1559,26 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       );
       if (hdrSurface) {
         final backend = HdrBackend.fromValue(Pref.hdrBackend);
-        // 只有 mediacodec_embed 由系统/解码器直通 HDR；gpu/gpu-next 的
-        // libmpv 构建没有 Android HDR EGL/dataspace，请求 HDR 输出会黑屏或
-        // 颜色异常。对这两个后端关闭 target-colorspace-hint，让 mpv 正常
-        // 做 HDR→SDR 色调映射后输出到 Surface。
-        properties['target-colorspace-hint'] =
-            backend == HdrBackend.mediacodecEmbed ? 'yes' : 'no';
+        if (backend == HdrBackend.gpuNext) {
+          // gpu-next（libplacebo）在 Android 走 OpenGL/EGL。显式声明
+          // gpu-api/gpu-context，并请求 10bit float FBO + colorspace hint，
+          // 才能把 HDR 直接交给 Surface，而不是先 tone map 成 SDR。
+          properties['gpu-api'] = 'opengl';
+          properties['gpu-context'] = 'android';
+          properties['gpu-dumb-mode'] = 'no';
+          properties['fbo-format'] = 'rgba16hf';
+          properties['target-colorspace-hint'] = 'yes';
+          properties['hdr-compute-peak'] = 'yes';
+          properties['gamut-mapping-mode'] = 'auto';
+          properties['dither-depth'] = 'auto';
+          properties['video-output-levels'] = 'auto';
+        } else {
+          // 只有 mediacodec_embed 由系统/解码器直通 HDR；gpu 的 libmpv
+          // 构建没有 Android HDR EGL/dataspace，请求 HDR 输出会黑屏或
+          // 颜色异常，继续关闭 hint。
+          properties['target-colorspace-hint'] =
+              backend == HdrBackend.mediacodecEmbed ? 'yes' : 'no';
+        }
       }
       debugPrint('[HDR] properties: $properties');
       for (final entry in properties.entries) {
