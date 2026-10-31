@@ -63,6 +63,26 @@ def openUrl = { String url ->
     connection
 }
 
+// 不能直接对 URLConnection 调 Groovy 的 withInputStream（Gradle 的
+// HttpsURLConnectionImpl 没有这个动态方法），先取 inputStream 再拷贝。
+def download = { String url, File dest ->
+    def connection = openUrl(url)
+    try {
+        def code = connection.responseCode
+        if (code != 200) {
+            throw new GradleException("下载失败 HTTP ${code}: ${url}")
+        }
+        def input = connection.inputStream
+        try {
+            dest.withOutputStream { out -> out << input }
+        } finally {
+            input.close()
+        }
+    } finally {
+        connection.disconnect()
+    }
+}
+
 tasks.register("downloadLibmpv") {
     doLast {
         def outputDir = file("$buildDir/output")
@@ -73,9 +93,7 @@ tasks.register("downloadLibmpv") {
         cacheDir.mkdirs()
 
         def sumsFile = file("$cacheDir/SHA256SUMS")
-        openUrl("${libmpvBaseUrl}/SHA256SUMS").withInputStream { input ->
-            sumsFile.withOutputStream { out -> out << input }
-        }
+        download("${libmpvBaseUrl}/SHA256SUMS", sumsFile)
 
         def sums = [:]
         sumsFile.getText("UTF-8").readLines().each { line ->
@@ -95,9 +113,7 @@ tasks.register("downloadLibmpv") {
             if (!dest.exists() || sha256(dest) != expected) {
                 println "Downloading ${name} from ${libmpvBaseUrl}"
                 dest.delete()
-                openUrl("${libmpvBaseUrl}/${name}").withInputStream { input ->
-                    dest.withOutputStream { out -> out << input }
-                }
+                download("${libmpvBaseUrl}/${name}", dest)
             }
             def actual = sha256(dest)
             if (actual != expected) {
