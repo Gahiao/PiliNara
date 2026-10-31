@@ -2103,7 +2103,8 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         () =>
             (!isPipMode && !videoDetailController.videoState.value) ||
                 !videoDetailController.autoPlay ||
-                plPlayerController?.videoController == null
+                (plPlayerController?.videoController == null &&
+                    !(plPlayerController?.useNativeSurface ?? false))
             ? const SizedBox.shrink()
             : PLVideoPlayer(
                 maxWidth: width,
