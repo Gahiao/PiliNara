@@ -158,11 +158,19 @@ enum HdrHwdecMode {
   auto(
     'auto',
     '自动（HDR 优先拷贝解码）',
-    'HDR 直通出画时固定 mediacodec；纹理出画时 HDR 片源自动使用拷贝解码以保证色调映射生效，SDR 片源保持原设置',
+    'HDR 直通出画时固定 mediacodec；gpu-next 下 HDR 片源固定使用拷贝解码以保证色调映射生效，SDR 片源保持原设置',
   ),
-  follow('follow', '跟随硬解设置', '始终使用「硬解模式」中选择的解码器'),
+  follow(
+    'follow',
+    '跟随硬解设置',
+    '始终使用「硬解模式」中选择的解码器；gpu-next 下 HDR 片源会改用拷贝解码',
+  ),
   copy('copy', '拷贝解码（可色调映射）', '解码后交给 mpv 处理，色调映射效果更好，但更耗电'),
-  direct('direct', '直通解码（省电）', 'HDR 数据直接送显，可能无法执行色调映射');
+  direct(
+    'direct',
+    '直通解码（省电）',
+    'HDR 数据直接送显，可能无法执行色调映射；gpu-next 下 HDR 片源会改用拷贝解码以避免偏色',
+  );
 
   const HdrHwdecMode(this.value, this.label, this.desc);
 

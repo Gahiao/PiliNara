@@ -32,7 +32,7 @@ Flutter 的 `Texture` 固定是 **RGBA8888**，HDR 元数据在这一步必然�
 | HDR 支持 | `enableHdr` | 开 | 总开关。关闭后 HDR 片源也走纹理（只做色调映射） |
 | HDR 直通出画 | `hdrSurface` | **开** | HDR 片源改用 SurfaceView 直通送显；切换后重开视频生效 |
 | HDR 渲染后端 | `hdrBackend` | **`mediacodec_embed`** | `mediacodec_embed`：解码器直通，最稳；`gpu-next`：libplacebo + Vulkan，实验性 HDR；`gpu-next-gl` / `gpu`：OpenGL 兼容路径 |
-| HDR 解码方式 | `hdrHwdecMode` | `auto` | 仅影响纹理路径；直通出画 + `mediacodec_embed` 时固定 `mediacodec` |
+| HDR 解码方式 | `hdrHwdecMode` | `auto` | `gpu-next` 下 HDR 片源固定拷贝解码；`mediacodec_embed` 直通路径固定 `mediacodec`；SDR 片源沿用该设置 |
 | HDR 输出模式 | `hdrOutputMode` | `auto` | `passthrough` 会额外写 `target-colorspace-hint=yes`（对纹理路径基本无效） |
 | HDR 色调映射 | `hdrToneMapping` | `auto` | `--tone-mapping`，纹理 / `gpu-next` / `gpu` 路径有效；`mediacodec_embed` 不生效 |
 | HDR 目标峰值亮度 | `hdrTargetPeak` | `0`（自动） | `--target-peak`，纹理 / `gpu-next` / `gpu` 路径有效 |
@@ -43,6 +43,10 @@ Flutter 的 `Texture` 固定是 **RGBA8888**，HDR 元数据在这一步必然�
 > `mediacodec_embed` 由 MediaCodec 直接解码到 Surface，mpv 拿不到帧，
 > 因此色调映射 / 峰值亮度 / 抖动等参数在这条路径上**不会生效**，这是直通的代价，
 > 也是它唯一能真正输出 HDR 的原因。关闭「HDR 直通出画」即可回到可调色调映射的纹理路径。
+>
+> `gpu-next` 下 HDR 片源不受「直通解码」设置影响：直通解码会让 libplacebo
+> 拿不到解码后的帧，出现偏色或色调映射失效，因此固定使用 `mediacodec-copy`。
+> 需要省电可选回 `mediacodec_embed` 后端。
 
 ## 三、原生出画层怎么工作
 
@@ -271,9 +275,9 @@ HDR 交换链扩展，这条路径通常只输出 SDR，主要用于兼容排查
    * `gpu-next-gl`：`gpu-api=opengl`、`gpu-context=android`；
 4. 如果 `gpu-context` 仍显示 `android`，说明 media_kit 的覆盖没有被补写覆盖掉——
    检查 `_initPlayer` 中 `VideoController.create` 之后的 `_applyHdrProperties` 调用；
-5. `gpu-next` 还要确认 `target-colorspace-hint=yes`、`target-prim=bt.2020`、
-   `target-trc=pq` 已经生效；这三项是 VO 选项，只在 `vo=gpu-next` 之后补写
-   才会被 libplacebo 看到；
+5. `gpu-next` 还要确认 `target-colorspace-hint=yes`、
+   `target-colorspace-hint-mode=target`、`target-prim=auto`、`target-trc=auto`
+   已经生效；这些是 VO 选项，只在 `vo=gpu-next` 之后补写才会被 libplacebo 看到；
 6. `视频色彩` 的 gamma 为 `pq` / `hlg` 才是真 HDR 片源；`bt.1886` 是 SDR；
 7. 以上都正常但面板仍不亮：检查设备是否支持 HDR、系统显示设置是否开启 HDR，
    以及当前窗口是否被系统限制为 SDR。

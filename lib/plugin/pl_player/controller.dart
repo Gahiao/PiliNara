@@ -713,8 +713,22 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       return 'mediacodec';
     }
     if (!Pref.enableHA) return null;
+    // Android 的 MediaCodec 拷贝解码不会把 Dolby Vision RPU 作为 side data
+    // 附到帧上，libplacebo 拿不到 IPTPQc2 元数据，只会按普通 PQ 处理，
+    // 表现为 profile 5 偏色且无法激发 HDR。profile 8 有 HDR10 基础层，
+    // 不依赖 RPU，所以不受影响。gpu-next 下让 FFmpeg 软解以保留 RPU。
+    if (isDolbyVisionProfile5 && _renderBackend.isGpuNext && !_useMedia3Dovi) {
+      return 'no';
+    }
     final config = HdrConfig.fromPref();
     if (!config.enabled) return Pref.hardwareDecoding;
+    // gpu-next 的色彩管理依赖 mpv 拿到解码后的帧。Android 的 mediacodec
+    // 直通解码把画面留在解码器/Surface 里，libplacebo 只能按不完整的
+    // 色彩信息处理，HDR 片源会出现偏色（尤其半屏/全屏切换后更明显）。
+    // 因此 gpu-next 下 HDR 片源一律走拷贝解码，不再跟随「直通解码」设置。
+    if (_renderBackend.isGpuNext && isHdrSource) {
+      return config.copyHwdec;
+    }
     return switch (config.hwdecMode) {
       HdrHwdecMode.auto =>
         isHdrSource ? config.copyHwdec : Pref.hardwareDecoding,
